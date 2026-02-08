@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c1917"/>
+      <stop offset="100%" stop-color="#292524"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)"/>
+  <!-- Book shape -->
+  <g transform="translate(512, 480)">
+    <!-- Left page -->
+    <path d="M-30,-200 C-30,-200 -220,-180 -280,-160 L-280,200 C-220,180 -30,160 -30,160 Z"
+          fill="#f5f5f4" opacity="0.95"/>
+    <!-- Right page -->
+    <path d="M30,-200 C30,-200 220,-180 280,-160 L280,200 C220,180 30,160 30,160 Z"
+          fill="#e7e5e4" opacity="0.95"/>
+    <!-- Spine -->
+    <rect x="-30" y="-200" width="60" height="360" rx="4" fill="#d6d3d1"/>
+    <!-- Text lines on left page -->
+    <line x1="-240" y1="-100" x2="-70" y2="-100" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <line x1="-240" y1="-60" x2="-90" y2="-60" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <line x1="-240" y1="-20" x2="-80" y2="-20" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <line x1="-240" y1="20" x2="-100" y2="20" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <line x1="-240" y1="60" x2="-70" y2="60" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <!-- Text lines on right page -->
+    <line x1="70" y1="-100" x2="240" y2="-100" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <line x1="70" y1="-60" x2="220" y2="-60" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <line x1="70" y1="-20" x2="230" y2="-20" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <line x1="70" y1="20" x2="200" y2="20" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+    <line x1="70" y1="60" x2="240" y2="60" stroke="#a8a29e" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <!-- Send arrow (bottom right) -->
+  <g transform="translate(700, 750)">
+    <circle cx="0" cy="0" r="90" fill="#16a34a"/>
+    <path d="M-35,15 L0,-30 L35,15 M0,-25 L0,35" stroke="#fff" stroke-width="14"
+          stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

@@ -498,17 +498,28 @@ def run_desktop():
 
 def run_browser():
     import webbrowser
-    port = 5000
+    port = _find_free_port()
     _init()
     webbrowser.open(f"http://127.0.0.1:{port}")
     app.run(host="127.0.0.1", port=port, debug=True, use_reloader=False)
 
 
+def _is_bundled_app() -> bool:
+    """Detect if we're running inside a py2app .app bundle."""
+    import sys
+    return getattr(sys, "frozen", False) or ".app/Contents" in sys.executable
+
+
 if __name__ == "__main__":
     print("\n  Starting Kindle Sender...\n")
-    try:
-        import webview  # noqa: F401
-        run_desktop()
-    except ImportError:
-        print("  pywebview not installed — opening in your browser instead.")
+    if _is_bundled_app():
+        # Bundled .app — always use browser (pywebview Cocoa bridge
+        # doesn't work reliably inside py2app bundles)
         run_browser()
+    else:
+        try:
+            import webview  # noqa: F401
+            run_desktop()
+        except (ImportError, Exception):
+            print("  pywebview unavailable — opening in your browser instead.")
+            run_browser()
