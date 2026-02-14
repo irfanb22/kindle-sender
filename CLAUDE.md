@@ -164,11 +164,12 @@ Full rewrite from Python desktop app to a hosted TypeScript web app. All v2 code
 | **Frontend** | Next.js (App Router) + React + Tailwind CSS v4 |
 | **Backend** | Next.js API routes / Netlify Functions |
 | **Auth** | Supabase Auth — magic link (passwordless) |
+| **Auth email delivery** | Resend (free tier, 3k emails/month) — custom SMTP in Supabase |
 | **Database** | Supabase Postgres |
 | **Local cache** | React Query or SWR (planned) |
 | **Article extraction** | `@extractus/article-extractor` (replaces trafilatura) |
-| **EPUB creation** | `epub-gen-memory` (planned, replaces ebooklib) |
-| **Email** | Nodemailer via Netlify Function (planned, replaces smtplib) |
+| **EPUB creation** | `epub-gen-memory` (replaces ebooklib) |
+| **Email (Kindle delivery)** | Nodemailer via Netlify Function (Gmail SMTP with app password) |
 | **Hosting** | Netlify |
 
 ## V2 Supabase details
@@ -342,6 +343,12 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - **Env vars on Netlify**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (set via CLI)
 - **Supabase Site URL**: Must be set to `https://kindle-sender.netlify.app` (in Auth > URL Configuration)
 - **Supabase Redirect URLs**: Must include `https://kindle-sender.netlify.app/auth/callback` and `http://localhost:3000/auth/callback`
+- **Supabase Custom SMTP**: Resend (configured in Supabase Dashboard > Project Settings > Auth > SMTP Settings)
+  - **Host**: `smtp.resend.com`
+  - **Port**: `465`
+  - **Username**: `resend`
+  - **Password**: Resend API key (set in Supabase dashboard, not in codebase)
+  - **Sender email**: `onboarding@resend.dev` (Resend shared domain)
 
 ### Deployment status
 
@@ -349,7 +356,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - ✅ Netlify env vars configured
 - ✅ Supabase Site URL updated to Netlify domain
 - ✅ Supabase redirect URL added for Netlify domain
-- ⚠️ **Auth login not yet verified working** — magic link login was hitting Supabase rate limits during testing and could not be fully tested. The `otp_expired` error seen earlier may have been caused by requesting magic links from a Netlify deploy preview URL instead of the production URL. Next step: wait for rate limit to reset, then test login from `https://kindle-sender.netlify.app`
+- ✅ **Auth login verified working** — magic link emails delivered via Resend custom SMTP. Supabase's built-in email provider was silently dropping emails due to free-tier rate limits; Resend fixed this.
 - ⚠️ **Send-to-Kindle not yet tested on Netlify** — works locally, but serverless function timeout (26s limit) could be an issue for large queues
 
 ### Deployment files
@@ -403,3 +410,4 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 | 2025-02-14 | Node 22 LTS for Netlify builds | v24 may not be supported on Netlify yet |
 | 2025-02-14 | `require()` for epub-gen-memory in send route | ESM `import` caused TS strict mode error on `.default` access during Netlify build |
 | 2025-02-14 | GitHub integration for deploys (not local CLI) | Worktree path resolution issues with `netlify deploy --build`; GitHub auto-deploy is more reliable |
+| 2026-02-14 | Resend for Supabase auth emails (not built-in provider) | Supabase's free-tier email provider silently drops emails after ~3-4/hour with no error. Resend free tier (3k/month) configured as custom SMTP in Supabase dashboard. Uses shared `onboarding@resend.dev` domain — no custom domain needed. |
