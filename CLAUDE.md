@@ -264,7 +264,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 | **Phase 4.5** | Deployment — Netlify hosting, Resend auth emails, production login verified | ✅ Complete |
 | **Phase 5** | Auto-send, send history, settings polish | ⬜ Not started |
 | **Phase 6** | EPUB customization — cover page, fonts, image toggle, metadata controls | ⬜ Not started |
-| **Phase 7** | Polish — mobile responsive, loading states, error handling, PWA | ⬜ Not started |
+| **Phase 7** | Polish — mobile responsive, loading states, error handling, PWA, branding, custom domain | ⬜ Not started |
 
 ### Phase 1 progress
 
@@ -358,7 +358,7 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
   - Author/name (on/off)
   - Read time (on/off)
   - Published date (on/off, shown if available from extraction)
-  - Source URL (always shown — not toggle-able, needed for attribution)
+  - Source URL is not included in the EPUB (already removed in current implementation)
 
 #### Font options
 
@@ -392,6 +392,16 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
 - No custom TOC page styling (using Kindle native TOC)
 - No cover page toggle (always on)
 - No article separator customization (keeping current flowing style)
+- No source URL in EPUB metadata (already removed in current implementation)
+
+### Phase 7 plan (Polish, Branding & Custom Domain)
+
+- Mobile responsive design — breakpoints for phone/tablet, responsive Kindle mockup
+- Loading states and error handling improvements across all pages
+- PWA manifest, service worker, app icons
+- **Branding** — finalize app name (currently "Kindle Sender" as codename), logo, color palette, update cover page branding to match
+- **Custom domain** — purchase and configure custom domain (replace `kindle-sender.netlify.app`), update Supabase redirect URLs, Resend sender domain with DNS verification
+- Resend custom domain setup (replace `onboarding@resend.dev` with branded sender email)
 
 ## V2 Pages (planned)
 
