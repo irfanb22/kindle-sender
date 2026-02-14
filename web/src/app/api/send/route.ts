@@ -114,12 +114,14 @@ export async function POST() {
 
     const chapters = sendableArticles.map((article, i) => {
       const titleText = article.title || extractDomain(article.url);
+      const readTime = article.read_time_minutes ? `${article.read_time_minutes} min` : "";
+      const tocTitle = [titleText, readTime].filter(Boolean).join(" · ");
       const authorDisplay = article.author || extractDomain(article.url);
-      const metaLine = `${authorDisplay} · ${article.url}`;
+      const metaParts = [authorDisplay, readTime ? `${readTime} read` : ""].filter(Boolean).join(" · ");
 
       return {
-        title: titleText,
-        content: `<h1>${escapeHtml(titleText)}</h1>\n<p class="meta">${escapeHtml(metaLine)}</p>\n${article.content}`,
+        title: tocTitle,
+        content: `<p class="meta">${escapeHtml(metaParts)}</p>\n${article.content}`,
         filename: `article_${i}.xhtml`,
       };
     });
