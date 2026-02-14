@@ -331,12 +331,40 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 | `/history` | Last 10 sends with status |
 | `/settings` | Kindle email, SMTP config, auto-send preferences |
 
-## V2 Deployment (planned)
+## V2 Deployment
 
-- **Hosting**: Netlify (developer has an existing account)
-- **Database**: Supabase free tier
-- **Build command**: `npm run build` (from `web/` directory)
-- **Netlify config**: Will need `@netlify/plugin-nextjs` or adapter for Next.js App Router support
+- **Live URL**: https://kindle-sender.netlify.app
+- **Hosting**: Netlify (free tier, auto-deploys from `main` branch)
+- **Database**: Supabase free tier (already cloud-hosted)
+- **Build**: Netlify builds from GitHub repo, `base = "web"`, `npm run build`, Node 22 LTS
+- **Config file**: `netlify.toml` at repo root (not inside `web/`)
+- **Plugin**: `@netlify/plugin-nextjs` (required for SSR/API routes on Netlify)
+- **Env vars on Netlify**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (set via CLI)
+- **Supabase Site URL**: Must be set to `https://kindle-sender.netlify.app` (in Auth > URL Configuration)
+- **Supabase Redirect URLs**: Must include `https://kindle-sender.netlify.app/auth/callback` and `http://localhost:3000/auth/callback`
+
+### Deployment status
+
+- ✅ Site created and building from GitHub `main` branch
+- ✅ Netlify env vars configured
+- ✅ Supabase Site URL updated to Netlify domain
+- ✅ Supabase redirect URL added for Netlify domain
+- ⚠️ **Auth login not yet verified working** — magic link login was hitting Supabase rate limits during testing and could not be fully tested. The `otp_expired` error seen earlier may have been caused by requesting magic links from a Netlify deploy preview URL instead of the production URL. Next step: wait for rate limit to reset, then test login from `https://kindle-sender.netlify.app`
+- ⚠️ **Send-to-Kindle not yet tested on Netlify** — works locally, but serverless function timeout (26s limit) could be an issue for large queues
+
+### Deployment files
+
+| File | Purpose |
+|------|---------|
+| `netlify.toml` | Build config — base dir, build command, Node version, Next.js plugin |
+| `web/package.json` | Added `@netlify/plugin-nextjs` to devDependencies |
+
+### Deployment gotchas
+
+- `netlify.toml` `base` resolves relative to the git repo root, not the current working directory. In worktrees, Netlify CLI may resolve to the main repo's `web/` instead of the worktree's. Use GitHub integration (auto-deploy from push) instead of local `netlify deploy --build`.
+- Netlify's `--no-build` deploy with `--dir=.next` does NOT work for Next.js apps with SSR/API routes. The `@netlify/plugin-nextjs` must run during the build to properly set up serverless functions.
+- Node 22 LTS is used instead of v24 since Netlify may not support v24 yet.
+- The `require()` import for epub-gen-memory (instead of ESM `import`) was needed to avoid TypeScript strict mode error on `.default` property access in the Netlify build environment.
 
 ---
 
@@ -369,3 +397,9 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 | 2025-02-12 | Settings page pulled forward from Phase 5 | Needed for send flow; built full page instead of a temporary modal |
 | 2025-02-12 | Skip articles with failed extraction silently | Send only articles with content; show skipped count in success message |
 | 2025-02-12 | Password masked in GET, preserved on email-only updates | Never send actual password to client; direct Supabase update avoids re-entering password |
+| 2025-02-14 | Deploy to Netlify now (before Phase 5) | Get it live with current features; iterate and redeploy |
+| 2025-02-14 | Netlify free subdomain (not custom domain) | `kindle-sender.netlify.app` is sufficient for now |
+| 2025-02-14 | `@netlify/plugin-nextjs` required | Without it, Netlify serves 404 for all routes — SSR/API routes need the plugin |
+| 2025-02-14 | Node 22 LTS for Netlify builds | v24 may not be supported on Netlify yet |
+| 2025-02-14 | `require()` for epub-gen-memory in send route | ESM `import` caused TS strict mode error on `.default` access during Netlify build |
+| 2025-02-14 | GitHub integration for deploys (not local CLI) | Worktree path resolution issues with `netlify deploy --build`; GitHub auto-deploy is more reliable |
