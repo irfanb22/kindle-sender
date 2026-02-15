@@ -19,3 +19,11 @@ export type Settings = {
   schedule_day: string | null;
   schedule_time: string | null;
 };
+
+export type SendHistory = {
+  id: string;
+  article_count: number;
+  status: string;
+  error_message: string | null;
+  sent_at: string;
+};

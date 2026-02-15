@@ -226,16 +226,18 @@ All files live under `web/`:
 | `web/src/lib/supabase/middleware.ts` | Session refresh logic used by the middleware |
 | `web/src/app/(app)/layout.tsx` | Authenticated layout — top nav bar (Queue/History/Settings), sign out, user email |
 | `web/src/app/(app)/dashboard/page.tsx` | Dashboard — URL input, article queue list, send-to-Kindle with loading/success states |
-| `web/src/app/(app)/history/page.tsx` | Send history placeholder (Phase 5) |
-| `web/src/app/(app)/settings/page.tsx` | Settings page — Kindle email, Gmail address, app password config, auto-send (coming soon) |
+| `web/src/app/(app)/history/page.tsx` | Send history — last 10 sends with status, article count, timestamps |
+| `web/src/app/(app)/settings/page.tsx` | Settings page — email config, auto-send threshold/schedule, test email button |
 | `web/src/app/(app)/article/[id]/page.tsx` | Article preview page — fetches article, sanitizes HTML with DOMPurify, renders Kindle mockup |
 | `web/src/app/(app)/article/[id]/kindle-mockup.tsx` | Kindle device mockup — CSS bezel frame, e-ink screen, grayscale content rendering |
 | `web/src/app/api/articles/extract/route.ts` | Article extraction API — fetches URL, extracts content, calculates read time |
 | `web/src/app/api/send/route.ts` | Send-to-Kindle API — generates EPUB with epub-gen-memory, emails via Nodemailer/Gmail SMTP |
-| `web/src/app/api/settings/route.ts` | Settings API — GET (load, masked password) / POST (upsert email config) |
-| `web/src/lib/types.ts` | Shared TypeScript types (Article, Settings) used across pages |
+| `web/src/app/api/send/test/route.ts` | Test email API — sends a mini test EPUB to verify SMTP config and Kindle address |
+| `web/src/app/api/settings/route.ts` | Settings API — GET (load, masked password) / POST (upsert email config + auto-send prefs) |
+| `web/src/lib/types.ts` | Shared TypeScript types (Article, Settings, SendHistory) used across pages |
 | `web/supabase/migrations/001_create_tables.sql` | Database schema — articles, send_history, settings tables + RLS policies |
 | `web/supabase/migrations/002_add_read_time_and_description.sql` | Adds read_time_minutes and description columns to articles |
+| `web/netlify/functions/scheduled-send.mts` | Netlify Scheduled Function — runs hourly, checks user schedules, sends queued articles |
 
 ## V2 Design system
 
@@ -262,7 +264,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 | **Phase 3** | Kindle preview page with device mockup | ✅ Complete |
 | **Phase 4** | EPUB generation + email sending + settings page | ✅ Complete |
 | **Phase 4.5** | Deployment — Netlify hosting, Resend auth emails, production login verified | ✅ Complete |
-| **Phase 5** | Auto-send, send history, settings polish | ⬜ Not started |
+| **Phase 5** | Auto-send, send history, settings polish, test email | ✅ Complete |
 | **Phase 6** | EPUB customization — cover page, fonts, image toggle, metadata controls | ⬜ Not started |
 | **Phase 7** | Polish — mobile responsive, loading states, error handling, PWA, branding, custom domain | ⬜ Not started |
 
@@ -333,6 +335,28 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - ✅ Resend configured as custom SMTP in Supabase (replaces rate-limited built-in email provider)
 - ✅ Magic link auth verified working on production (`https://kindle-sender.netlify.app`)
 - ⚠️ Send-to-Kindle not yet tested on Netlify (works locally; serverless timeout may be an issue)
+
+### Phase 5 progress (Auto-Send, History & Settings Polish)
+
+- ✅ Send History page — queries `send_history` table, shows last 10 sends with status icon, article count, error message, smart date formatting
+- ✅ `SendHistory` type added to shared types (`web/src/lib/types.ts`)
+- ✅ Threshold auto-send — when queue reaches N articles, shows a 30-second countdown toast with cancel button
+- ✅ Countdown cancels automatically if articles are removed below threshold
+- ✅ Auto-send threshold loaded from user settings on dashboard mount
+- ✅ Weekly scheduled send — Netlify Scheduled Function (`web/netlify/functions/scheduled-send.mts`) runs hourly via cron
+- ✅ Scheduled function queries all users with matching `schedule_day` + `schedule_time`, runs full EPUB + email pipeline per user
+- ✅ Uses Supabase service role key to bypass RLS (runs without user session)
+- ✅ `netlify.toml` updated with `[functions]` directory config
+- ✅ Settings page — auto-send section fully enabled (was disabled "Coming soon" placeholder)
+- ✅ Threshold input (2–50), weekly schedule day dropdown, schedule time picker
+- ✅ Settings API route updated to accept and validate auto-send fields
+- ✅ Settings page visual polish — section header icons, card-like groupings, better spacing
+- ✅ Test email button — sends a mini test EPUB to verify full pipeline (SMTP config + Kindle address)
+- ✅ Test email API route (`/api/send/test`) — generates small EPUB with delivery confirmation content
+- ✅ Test button disabled until email settings are saved; shows spinner during send
+- ✅ Password-preserving save — updating auto-send settings without re-entering password uses direct Supabase update
+- ⚠️ Scheduled send uses UTC time matching — timezone-aware scheduling would require a user timezone field (not yet implemented)
+- ⚠️ Scheduled function requires `SUPABASE_SERVICE_ROLE_KEY` env var on Netlify (must be set manually)
 
 ### Phase 6 plan (EPUB Customization)
 
@@ -497,3 +521,8 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
 | 2026-02-14 | Kindle-native fonts only (Bookerly, Georgia, Palatino, Helvetica) | Ensures fonts render correctly on all Kindle devices without embedding font files in EPUB. |
 | 2026-02-14 | JSONB column for EPUB preferences (considered) | Single `epub_preferences` JSONB column vs individual columns — more flexible for adding future options without migrations. Decision TBD at implementation time. |
 | 2026-02-14 | No archive/read-tracking links in EPUB | Adds complexity (server-side redirect routes, tracking state) for marginal value. Can revisit later. |
+| 2026-02-15 | 30-second countdown toast for threshold auto-send | Gives user a chance to add more articles or cancel; better UX than immediate trigger |
+| 2026-02-15 | Netlify Scheduled Function for weekly send (hourly cron) | Runs every hour, matches users whose schedule_day + schedule_time fall in current UTC hour. Requires SUPABASE_SERVICE_ROLE_KEY env var. |
+| 2026-02-15 | UTC-based schedule matching (no user timezone) | Simpler implementation; user sets schedule time in UTC context. Timezone-aware scheduling deferred to a future improvement. |
+| 2026-02-15 | Test email sends mini EPUB (not plain text) | Tests the full pipeline: EPUB generation + SMTP + Kindle delivery. Catches more failure modes than a plain text email. |
+| 2026-02-15 | Send history shows simple summary (no article titles) | DB only stores article_count; avoids join table complexity. Shows date, count, and status per entry. |
