@@ -18,7 +18,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("settings")
       .select(
-        "kindle_email, sender_email, smtp_password, min_article_count, schedule_days, schedule_time, timezone"
+        "kindle_email, sender_email, smtp_password, min_article_count, schedule_days, schedule_time, timezone, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date"
       )
       .eq("user_id", user.id)
       .single();
@@ -53,7 +53,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { kindle_email, sender_email, smtp_password, min_article_count, schedule_days, schedule_time, timezone } = body;
+    const { kindle_email, sender_email, smtp_password, min_article_count, schedule_days, schedule_time, timezone, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date } = body;
 
     if (!kindle_email || !sender_email || !smtp_password) {
       return NextResponse.json(
@@ -86,6 +86,15 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
+    }
+
+    // Validate epub_font if provided
+    const validFonts = ["bookerly", "georgia", "palatino", "helvetica"];
+    if (epub_font && !validFonts.includes(epub_font)) {
+      return NextResponse.json(
+        { error: "Invalid font choice" },
+        { status: 400 }
+      );
     }
 
     // Validate schedule_days if provided
@@ -122,6 +131,11 @@ export async function POST(request: Request) {
       schedule_days: schedule_days && schedule_days.length > 0 ? schedule_days : null,
       schedule_time: schedule_time || null,
       timezone: timezone || null,
+      epub_font: epub_font || "bookerly",
+      epub_include_images: epub_include_images ?? true,
+      epub_show_author: epub_show_author ?? true,
+      epub_show_read_time: epub_show_read_time ?? true,
+      epub_show_published_date: epub_show_published_date ?? true,
     };
 
     const { error } = await supabase.from("settings").upsert(upsertData);

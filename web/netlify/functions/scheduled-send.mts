@@ -1,6 +1,7 @@
 import type { Config } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
+import { generateKindleEpub } from "../../src/lib/epub";
 
 // JS day number (0=Sun, 1=Mon, etc.) to 3-letter abbreviation
 const DAY_ABBREV: Record<number, string> = {
@@ -12,22 +13,6 @@ const DAY_ABBREV: Record<number, string> = {
   5: "fri",
   6: "sat",
 };
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-function extractDomain(url: string): string {
-  try {
-    return new URL(url).hostname.replace("www.", "");
-  } catch {
-    return url;
-  }
-}
 
 /**
  * Get the current day abbreviation and hour in a given timezone.
@@ -78,7 +63,7 @@ export default async function handler() {
   // Fetch all users who have scheduled days configured and complete email settings
   const { data: allSettings, error: settingsError } = await supabase
     .from("settings")
-    .select("user_id, kindle_email, sender_email, smtp_password, schedule_days, schedule_time, timezone, min_article_count")
+    .select("user_id, kindle_email, sender_email, smtp_password, schedule_days, schedule_time, timezone, min_article_count, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date")
     .not("schedule_days", "is", null)
     .not("schedule_time", "is", null)
     .not("kindle_email", "is", null)
@@ -117,10 +102,6 @@ export default async function handler() {
 
   console.log(`Found ${matchingUsers.length} user(s) to process for scheduled send`);
 
-  // Dynamically import epub-gen-memory
-  const epubModule = await import("epub-gen-memory");
-  const generateEpub = epubModule.default ?? epubModule;
-
   for (const settings of matchingUsers) {
     try {
       // Fetch queued articles for this user
@@ -153,46 +134,36 @@ export default async function handler() {
         continue;
       }
 
-      // Generate EPUB
-      const dateStr = new Date().toISOString().split("T")[0];
-      const chapters = sendableArticles.map((article: { title?: string; url: string; author?: string; read_time_minutes?: number; content: string }, i: number) => {
-        const titleText = article.title || extractDomain(article.url);
-        const readTime = article.read_time_minutes ? `${article.read_time_minutes} min` : "";
-        const tocTitle = [titleText, readTime].filter(Boolean).join(" · ");
-        const authorDisplay = article.author || extractDomain(article.url);
-        const metaParts = [authorDisplay, readTime ? `${readTime} read` : ""].filter(Boolean).join(" · ");
+      // Get next issue number for this user
+      const { data: lastSend } = await supabase
+        .from("send_history")
+        .select("issue_number")
+        .eq("user_id", settings.user_id)
+        .eq("status", "success")
+        .not("issue_number", "is", null)
+        .order("issue_number", { ascending: false })
+        .limit(1)
+        .single();
 
-        return {
-          title: tocTitle,
-          content: `<p class="meta">${escapeHtml(metaParts)}</p>\n${article.content}`,
-          filename: `article_${i}.xhtml`,
-        };
-      });
+      const issueNumber = (lastSend?.issue_number || 0) + 1;
 
+      // Generate EPUB using shared module
       let epubBuffer: Buffer;
+      let epubFilename: string;
       try {
-        const rawResult = await generateEpub(
-          {
-            title: `ReadLater - ${dateStr}`,
-            author: "Kindle Sender",
-            css: `body { font-family: Georgia, "Times New Roman", serif; line-height: 1.7; margin: 1em; color: #1a1a1a; }
-h1 { font-size: 1.35em; margin: 0 0 0.3em; }
-.meta { color: #666; font-size: 0.82em; margin-bottom: 1.8em; }
-p { margin: 0 0 0.75em; text-indent: 0; }`,
-            ignoreFailedDownloads: true,
-            fetchTimeout: 10000,
-            verbose: false,
+        const result = await generateKindleEpub({
+          articles: sendableArticles,
+          preferences: {
+            font: settings.epub_font || "bookerly",
+            includeImages: settings.epub_include_images ?? true,
+            showAuthor: settings.epub_show_author ?? true,
+            showReadTime: settings.epub_show_read_time ?? true,
+            showPublishedDate: settings.epub_show_published_date ?? true,
           },
-          chapters
-        );
-
-        if (Buffer.isBuffer(rawResult)) {
-          epubBuffer = rawResult;
-        } else if (rawResult instanceof Uint8Array) {
-          epubBuffer = Buffer.from(rawResult);
-        } else {
-          throw new Error(`Unexpected epub result type`);
-        }
+          issueNumber,
+        });
+        epubBuffer = result.buffer;
+        epubFilename = result.filename;
       } catch (epubError) {
         const msg = epubError instanceof Error ? epubError.message : "Unknown";
         console.error(`User ${settings.user_id}: EPUB generation failed: ${msg}`);
@@ -222,7 +193,7 @@ p { margin: 0 0 0.75em; text-indent: 0; }`,
           html: "<div></div>",
           attachments: [
             {
-              filename: `ReadLater-${dateStr}.epub`,
+              filename: epubFilename,
               content: epubBuffer,
               contentType: "application/epub+zip",
             },
@@ -250,10 +221,11 @@ p { margin: 0 0 0.75em; text-indent: 0; }`,
       await supabase.from("send_history").insert({
         user_id: settings.user_id,
         article_count: sendableArticles.length,
+        issue_number: issueNumber,
         status: "success",
       });
 
-      console.log(`User ${settings.user_id}: Scheduled send successful — ${sendableArticles.length} articles`);
+      console.log(`User ${settings.user_id}: Scheduled send successful — ${sendableArticles.length} articles (Issue #${issueNumber})`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       console.error(`User ${settings.user_id}: Unexpected error: ${msg}`);

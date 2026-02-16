@@ -14,7 +14,7 @@ export default function HistoryPage() {
       const supabase = supabaseRef.current;
       const { data } = await supabase
         .from("send_history")
-        .select("id, article_count, status, error_message, sent_at")
+        .select("id, article_count, issue_number, status, error_message, sent_at")
         .order("sent_at", { ascending: false })
         .limit(10);
 
@@ -220,6 +220,9 @@ export default function HistoryPage() {
                         fontWeight: 500,
                       }}
                     >
+                      {entry.issue_number
+                        ? `Issue #${entry.issue_number} — `
+                        : ""}
                       {entry.article_count} article
                       {entry.article_count !== 1 ? "s" : ""} sent
                     </p>

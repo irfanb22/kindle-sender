@@ -76,6 +76,13 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("");
   const [minArticleCount, setMinArticleCount] = useState("");
 
+  // EPUB formatting
+  const [epubFont, setEpubFont] = useState("bookerly");
+  const [epubIncludeImages, setEpubIncludeImages] = useState(true);
+  const [epubShowAuthor, setEpubShowAuthor] = useState(true);
+  const [epubShowReadTime, setEpubShowReadTime] = useState(true);
+  const [epubShowPublishedDate, setEpubShowPublishedDate] = useState(true);
+
   // UI state
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,6 +111,11 @@ export default function SettingsPage() {
               ? String(data.settings.min_article_count)
               : ""
           );
+          setEpubFont(data.settings.epub_font || "bookerly");
+          setEpubIncludeImages(data.settings.epub_include_images ?? true);
+          setEpubShowAuthor(data.settings.epub_show_author ?? true);
+          setEpubShowReadTime(data.settings.epub_show_read_time ?? true);
+          setEpubShowPublishedDate(data.settings.epub_show_published_date ?? true);
         } else {
           // No settings yet — auto-detect timezone
           setTimezone(getLocalTimezone());
@@ -152,13 +164,18 @@ export default function SettingsPage() {
     setSaving(true);
 
     try {
-      const body: Record<string, string | number | string[] | null> = {
+      const body: Record<string, string | number | boolean | string[] | null> = {
         kindle_email: kindleEmail.trim(),
         sender_email: senderEmail.trim(),
         min_article_count: minArticleCount ? Number(minArticleCount) : null,
         schedule_days: scheduleDays.length > 0 ? scheduleDays : null,
         schedule_time: scheduleTime || null,
         timezone: timezone || null,
+        epub_font: epubFont,
+        epub_include_images: epubIncludeImages,
+        epub_show_author: epubShowAuthor,
+        epub_show_read_time: epubShowReadTime,
+        epub_show_published_date: epubShowPublishedDate,
       };
 
       // Only send password if the user entered a new one
@@ -185,6 +202,11 @@ export default function SettingsPage() {
             schedule_days: body.schedule_days,
             schedule_time: body.schedule_time,
             timezone: body.timezone,
+            epub_font: body.epub_font,
+            epub_include_images: body.epub_include_images,
+            epub_show_author: body.epub_show_author,
+            epub_show_read_time: body.epub_show_read_time,
+            epub_show_published_date: body.epub_show_published_date,
           })
           .eq("user_id", user.id);
 
@@ -833,6 +855,213 @@ export default function SettingsPage() {
           </div>
         </div>
 
+        {/* EPUB Formatting */}
+        <div
+          className="rounded-xl border p-6 mb-4"
+          style={{
+            background: "#141414",
+            borderColor: "#262626",
+            animation: "fadeUp 0.6s ease 0.2s both",
+          }}
+        >
+          <div className="flex items-center gap-3 mb-5">
+            <div
+              className="flex items-center justify-center w-8 h-8 rounded-lg"
+              style={{
+                background: "rgba(34,197,94,0.1)",
+                border: "1px solid rgba(34,197,94,0.15)",
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M4 19.5A2.5 2.5 0 016.5 17H20"
+                  stroke="#22c55e"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"
+                  stroke="#22c55e"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <div>
+              <h2
+                className="text-base"
+                style={{
+                  fontFamily: "'Instrument Serif', Georgia, serif",
+                  color: "#ededed",
+                }}
+              >
+                EPUB Formatting
+              </h2>
+              <p
+                className="text-xs"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "#666666",
+                }}
+              >
+                Customize how articles appear on your Kindle
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            {/* Font selection */}
+            <div>
+              <label
+                className="block text-xs mb-1.5"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "#888888",
+                }}
+              >
+                Body font
+              </label>
+              <select
+                value={epubFont}
+                onChange={(e) => {
+                  setEpubFont(e.target.value);
+                  setError(null);
+                }}
+                className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 appearance-none"
+                style={inputStyle}
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+              >
+                <option value="bookerly">Bookerly (Kindle default)</option>
+                <option value="georgia">Georgia</option>
+                <option value="palatino">Palatino</option>
+                <option value="helvetica">Helvetica</option>
+              </select>
+              <p
+                className="text-xs mt-1.5"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "#555555",
+                }}
+              >
+                Font used for article body text in the EPUB
+              </p>
+            </div>
+
+            {/* Include images toggle */}
+            <div className="flex items-center justify-between">
+              <div>
+                <label
+                  className="block text-xs"
+                  style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: "#888888",
+                  }}
+                >
+                  Include images
+                </label>
+                <p
+                  className="text-xs mt-0.5"
+                  style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: "#555555",
+                  }}
+                >
+                  When off, images are stripped from articles
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={epubIncludeImages}
+                onClick={() => setEpubIncludeImages(!epubIncludeImages)}
+                className="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+                style={{
+                  background: epubIncludeImages
+                    ? "rgba(34,197,94,0.4)"
+                    : "#262626",
+                  border: epubIncludeImages
+                    ? "1px solid rgba(34,197,94,0.5)"
+                    : "1px solid #404040",
+                }}
+              >
+                <span
+                  className="inline-block h-5 w-5 rounded-full transition-transform duration-200"
+                  style={{
+                    background: epubIncludeImages ? "#22c55e" : "#666666",
+                    transform: epubIncludeImages
+                      ? "translateX(20px)"
+                      : "translateX(0px)",
+                    marginTop: "0.5px",
+                  }}
+                />
+              </button>
+            </div>
+
+            {/* Article metadata toggles */}
+            <div>
+              <label
+                className="block text-xs mb-2.5"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "#888888",
+                }}
+              >
+                Show in article headers
+              </label>
+              <div className="flex gap-2">
+                {([
+                  { label: "Author", value: epubShowAuthor, setter: setEpubShowAuthor },
+                  { label: "Read time", value: epubShowReadTime, setter: setEpubShowReadTime },
+                  { label: "Published date", value: epubShowPublishedDate, setter: setEpubShowPublishedDate },
+                ] as const).map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => item.setter(!item.value)}
+                    className="flex-1 rounded-lg py-2 text-xs font-medium transition-all duration-200 cursor-pointer"
+                    style={{
+                      fontFamily: "'DM Sans', sans-serif",
+                      background: item.value
+                        ? "rgba(34,197,94,0.15)"
+                        : "#0a0a0a",
+                      border: item.value
+                        ? "1px solid rgba(34,197,94,0.4)"
+                        : "1px solid #262626",
+                      color: item.value ? "#22c55e" : "#888888",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!item.value) {
+                        e.currentTarget.style.borderColor = "#404040";
+                        e.currentTarget.style.color = "#ededed";
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!item.value) {
+                        e.currentTarget.style.borderColor = "#262626";
+                        e.currentTarget.style.color = "#888888";
+                      }
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <p
+                className="text-xs mt-1.5"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "#555555",
+                }}
+              >
+                Metadata shown below each article title in the EPUB
+              </p>
+            </div>
+          </div>
+        </div>
+
         {/* Status messages */}
         {error && (
           <div
@@ -915,7 +1144,7 @@ export default function SettingsPage() {
         {/* Save button */}
         <div
           className="flex justify-end"
-          style={{ animation: "fadeUp 0.6s ease 0.2s both" }}
+          style={{ animation: "fadeUp 0.6s ease 0.25s both" }}
         >
           <button
             type="submit"

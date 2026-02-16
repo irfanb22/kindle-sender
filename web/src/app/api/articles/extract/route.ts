@@ -79,6 +79,7 @@ export async function POST(request: Request) {
       description?: string | null;
       content?: string | null;
       source?: string | null;
+      published?: string | null;
     } | null = null;
 
     try {
@@ -95,6 +96,7 @@ export async function POST(request: Request) {
           description: result.description || null,
           content: result.content || null,
           source: result.source || null,
+          published: result.published || null,
         };
       }
     } catch {
@@ -117,6 +119,7 @@ export async function POST(request: Request) {
           description: extractedData.description,
           content: extractedData.content,
           read_time_minutes: readTime,
+          published_at: extractedData.published || null,
         })
         .eq("id", articleId)
         .select()

@@ -39,7 +39,7 @@ export default function ArticlePreviewPage() {
     async function loadArticle() {
       const { data, error: fetchError } = await supabase
         .from("articles")
-        .select("id, url, title, author, description, content, read_time_minutes, status, created_at, sent_at")
+        .select("id, url, title, author, description, content, read_time_minutes, published_at, status, created_at, sent_at")
         .eq("id", id)
         .single();
 

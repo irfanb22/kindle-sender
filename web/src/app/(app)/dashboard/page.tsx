@@ -22,7 +22,7 @@ export default function DashboardPage() {
   const fetchArticles = useCallback(async () => {
     const { data } = await supabase
       .from("articles")
-      .select("id, url, title, author, description, content, read_time_minutes, status, created_at, sent_at")
+      .select("id, url, title, author, description, content, read_time_minutes, published_at, status, created_at, sent_at")
       .eq("status", "queued")
       .order("created_at", { ascending: false });
 
@@ -92,7 +92,7 @@ export default function DashboardPage() {
 
       const { data } = await supabase
         .from("articles")
-        .select("id, url, title, author, description, content, read_time_minutes, status, created_at, sent_at")
+        .select("id, url, title, author, description, content, read_time_minutes, published_at, status, created_at, sent_at")
         .eq("id", articleId)
         .single();
 
