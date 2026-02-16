@@ -15,9 +15,10 @@ export type Settings = {
   kindle_email: string | null;
   sender_email: string | null;
   smtp_password: string | null;
-  auto_send_threshold: number | null;
-  schedule_day: string | null;
+  min_article_count: number | null;
+  schedule_days: string[] | null;
   schedule_time: string | null;
+  timezone: string | null;
 };
 
 export type SendHistory = {

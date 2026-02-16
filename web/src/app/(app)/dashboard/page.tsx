@@ -15,11 +15,6 @@ export default function DashboardPage() {
   const [sending, setSending] = useState(false);
   const [sendSuccess, setSendSuccess] = useState<{ count: number; skipped: number } | null>(null);
 
-  // Auto-send countdown
-  const [autoSendThreshold, setAutoSendThreshold] = useState<number | null>(null);
-  const [countdown, setCountdown] = useState<number | null>(null);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
   const router = useRouter();
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
@@ -35,59 +30,9 @@ export default function DashboardPage() {
     setFetching(false);
   }, [supabase]);
 
-  // Load user's auto-send threshold
-  useEffect(() => {
-    async function loadThreshold() {
-      try {
-        const res = await fetch("/api/settings");
-        const data = await res.json();
-        if (data.settings?.auto_send_threshold) {
-          setAutoSendThreshold(data.settings.auto_send_threshold);
-        }
-      } catch {
-        // silently fail — auto-send is optional
-      }
-    }
-    loadThreshold();
-  }, []);
-
   useEffect(() => {
     fetchArticles();
   }, [fetchArticles]);
-
-  // Clean up countdown interval on unmount
-  useEffect(() => {
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, []);
-
-  function startCountdown() {
-    // Cancel any existing countdown
-    if (countdownRef.current) clearInterval(countdownRef.current);
-
-    setCountdown(30);
-    countdownRef.current = setInterval(() => {
-      setCountdown((prev) => {
-        if (prev === null || prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          countdownRef.current = null;
-          // Trigger the send
-          handleSend();
-          return null;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }
-
-  function cancelCountdown() {
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-      countdownRef.current = null;
-    }
-    setCountdown(null);
-  }
 
   async function handleAddUrl(e: React.FormEvent) {
     e.preventDefault();
@@ -125,17 +70,7 @@ export default function DashboardPage() {
       const article = data.article as Article;
 
       // Add article to list immediately
-      setArticles((prev) => {
-        const newArticles = [article, ...prev];
-
-        // Check threshold auto-send (after the article is added)
-        if (autoSendThreshold && newArticles.length >= autoSendThreshold && countdown === null && !sending) {
-          // Use setTimeout to start countdown after state update
-          setTimeout(() => startCountdown(), 0);
-        }
-
-        return newArticles;
-      });
+      setArticles((prev) => [article, ...prev]);
       setLoading(false);
 
       // If extraction hasn't completed yet (no content), poll for updates
@@ -191,20 +126,9 @@ export default function DashboardPage() {
       next.delete(id);
       return next;
     });
-
-    // Cancel countdown if removing an article brings us below threshold
-    if (autoSendThreshold && countdown !== null) {
-      const remaining = articles.length - 1;
-      if (remaining < autoSendThreshold) {
-        cancelCountdown();
-      }
-    }
   }
 
   async function handleSend() {
-    // Cancel any active countdown
-    cancelCountdown();
-
     setSending(true);
     setError(null);
     setSendSuccess(null);
@@ -338,63 +262,6 @@ export default function DashboardPage() {
           </div>
         )}
       </form>
-
-      {/* Auto-send countdown toast */}
-      {countdown !== null && (
-        <div
-          className="mb-6 flex items-center justify-between rounded-xl border px-5 py-4"
-          style={{
-            background: 'rgba(34,197,94,0.06)',
-            borderColor: 'rgba(34,197,94,0.2)',
-            animation: 'fadeUp 0.3s ease both',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className="flex items-center justify-center w-9 h-9 rounded-full shrink-0"
-              style={{
-                background: 'rgba(34,197,94,0.15)',
-                border: '1px solid rgba(34,197,94,0.25)',
-              }}
-            >
-              <span
-                className="text-sm font-medium"
-                style={{ fontFamily: "'DM Sans', sans-serif", color: '#22c55e' }}
-              >
-                {countdown}
-              </span>
-            </div>
-            <div>
-              <p className="text-sm" style={{ fontFamily: "'DM Sans', sans-serif", color: '#ededed', fontWeight: 500 }}>
-                Auto-sending in {countdown}s
-              </p>
-              <p className="text-xs" style={{ fontFamily: "'DM Sans', sans-serif", color: '#888888' }}>
-                Queue reached {autoSendThreshold} articles
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={cancelCountdown}
-            className="rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 cursor-pointer"
-            style={{
-              fontFamily: "'DM Sans', sans-serif",
-              color: '#888888',
-              border: '1px solid #262626',
-              background: 'transparent',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#404040';
-              e.currentTarget.style.color = '#ededed';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#262626';
-              e.currentTarget.style.color = '#888888';
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      )}
 
       {/* Article queue */}
       {fetching ? (

@@ -18,7 +18,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("settings")
       .select(
-        "kindle_email, sender_email, smtp_password, auto_send_threshold, schedule_day, schedule_time"
+        "kindle_email, sender_email, smtp_password, min_article_count, schedule_days, schedule_time, timezone"
       )
       .eq("user_id", user.id)
       .single();
@@ -53,7 +53,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { kindle_email, sender_email, smtp_password, auto_send_threshold, schedule_day, schedule_time } = body;
+    const { kindle_email, sender_email, smtp_password, min_article_count, schedule_days, schedule_time, timezone } = body;
 
     if (!kindle_email || !sender_email || !smtp_password) {
       return NextResponse.json(
@@ -77,24 +77,28 @@ export async function POST(request: Request) {
       );
     }
 
-    // Validate auto_send_threshold if provided
-    if (auto_send_threshold !== undefined && auto_send_threshold !== null) {
-      const threshold = Number(auto_send_threshold);
-      if (isNaN(threshold) || threshold < 2 || threshold > 50) {
+    // Validate min_article_count if provided
+    if (min_article_count !== undefined && min_article_count !== null) {
+      const count = Number(min_article_count);
+      if (isNaN(count) || count < 1 || count > 50) {
         return NextResponse.json(
-          { error: "Auto-send threshold must be between 2 and 50" },
+          { error: "Minimum article count must be between 1 and 50" },
           { status: 400 }
         );
       }
     }
 
-    // Validate schedule_day if provided
+    // Validate schedule_days if provided
     const validDays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
-    if (schedule_day && !validDays.includes(schedule_day)) {
-      return NextResponse.json(
-        { error: "Invalid schedule day" },
-        { status: 400 }
-      );
+    if (schedule_days && Array.isArray(schedule_days)) {
+      for (const day of schedule_days) {
+        if (!validDays.includes(day)) {
+          return NextResponse.json(
+            { error: `Invalid schedule day: ${day}` },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     const supabase = await createClient();
@@ -114,9 +118,10 @@ export async function POST(request: Request) {
       kindle_email,
       sender_email,
       smtp_password,
-      auto_send_threshold: auto_send_threshold || null,
-      schedule_day: schedule_day || null,
+      min_article_count: min_article_count || null,
+      schedule_days: schedule_days && schedule_days.length > 0 ? schedule_days : null,
       schedule_time: schedule_time || null,
+      timezone: timezone || null,
     };
 
     const { error } = await supabase.from("settings").upsert(upsertData);

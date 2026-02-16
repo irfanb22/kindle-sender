@@ -3,16 +3,65 @@
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-const DAYS = [
-  { value: "", label: "None" },
-  { value: "mon", label: "Monday" },
-  { value: "tue", label: "Tuesday" },
-  { value: "wed", label: "Wednesday" },
-  { value: "thu", label: "Thursday" },
-  { value: "fri", label: "Friday" },
-  { value: "sat", label: "Saturday" },
-  { value: "sun", label: "Sunday" },
+const DAY_OPTIONS = [
+  { value: "mon", label: "Mon" },
+  { value: "tue", label: "Tue" },
+  { value: "wed", label: "Wed" },
+  { value: "thu", label: "Thu" },
+  { value: "fri", label: "Fri" },
+  { value: "sat", label: "Sat" },
+  { value: "sun", label: "Sun" },
 ] as const;
+
+function getTimezoneList(): string[] {
+  try {
+    return Intl.supportedValuesOf("timeZone");
+  } catch {
+    // Fallback for older browsers
+    return [
+      "America/New_York",
+      "America/Chicago",
+      "America/Denver",
+      "America/Los_Angeles",
+      "America/Anchorage",
+      "Pacific/Honolulu",
+      "Europe/London",
+      "Europe/Berlin",
+      "Europe/Paris",
+      "Asia/Tokyo",
+      "Asia/Shanghai",
+      "Asia/Kolkata",
+      "Australia/Sydney",
+      "UTC",
+    ];
+  }
+}
+
+function getLocalTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return "UTC";
+  }
+}
+
+function formatTimezoneLabel(tz: string): string {
+  try {
+    const now = new Date();
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      timeZoneName: "shortOffset",
+    });
+    const parts = formatter.formatToParts(now);
+    const offsetPart = parts.find((p) => p.type === "timeZoneName");
+    const offset = offsetPart?.value || "";
+    // Turn "America/New_York" into "New York"
+    const city = tz.split("/").pop()?.replace(/_/g, " ") || tz;
+    return `${city} (${offset})`;
+  } catch {
+    return tz;
+  }
+}
 
 export default function SettingsPage() {
   // Email config
@@ -21,10 +70,11 @@ export default function SettingsPage() {
   const [smtpPassword, setSmtpPassword] = useState("");
   const [hasExistingPassword, setHasExistingPassword] = useState(false);
 
-  // Auto-send
-  const [autoSendThreshold, setAutoSendThreshold] = useState("");
-  const [scheduleDay, setScheduleDay] = useState("");
+  // Delivery schedule
+  const [scheduleDays, setScheduleDays] = useState<string[]>([]);
   const [scheduleTime, setScheduleTime] = useState("");
+  const [timezone, setTimezone] = useState("");
+  const [minArticleCount, setMinArticleCount] = useState("");
 
   // UI state
   const [loading, setLoading] = useState(true);
@@ -34,6 +84,7 @@ export default function SettingsPage() {
   const [success, setSuccess] = useState<string | null>(null);
 
   const supabaseRef = useRef(createClient());
+  const timezones = useRef(getTimezoneList());
 
   useEffect(() => {
     async function loadSettings() {
@@ -45,13 +96,17 @@ export default function SettingsPage() {
           setKindleEmail(data.settings.kindle_email || "");
           setSenderEmail(data.settings.sender_email || "");
           setHasExistingPassword(!!data.settings.smtp_password);
-          setAutoSendThreshold(
-            data.settings.auto_send_threshold
-              ? String(data.settings.auto_send_threshold)
+          setScheduleDays(data.settings.schedule_days || []);
+          setScheduleTime(data.settings.schedule_time || "");
+          setTimezone(data.settings.timezone || getLocalTimezone());
+          setMinArticleCount(
+            data.settings.min_article_count
+              ? String(data.settings.min_article_count)
               : ""
           );
-          setScheduleDay(data.settings.schedule_day || "");
-          setScheduleTime(data.settings.schedule_time || "");
+        } else {
+          // No settings yet — auto-detect timezone
+          setTimezone(getLocalTimezone());
         }
       } catch {
         setError("Failed to load settings");
@@ -62,6 +117,13 @@ export default function SettingsPage() {
 
     loadSettings();
   }, []);
+
+  function toggleDay(day: string) {
+    setScheduleDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    );
+    setError(null);
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -78,11 +140,11 @@ export default function SettingsPage() {
       return;
     }
 
-    // Validate threshold if set
-    if (autoSendThreshold) {
-      const n = Number(autoSendThreshold);
-      if (isNaN(n) || n < 2 || n > 50) {
-        setError("Auto-send threshold must be between 2 and 50");
+    // Validate min article count if set
+    if (minArticleCount) {
+      const n = Number(minArticleCount);
+      if (isNaN(n) || n < 1 || n > 50) {
+        setError("Minimum article count must be between 1 and 50");
         return;
       }
     }
@@ -90,12 +152,13 @@ export default function SettingsPage() {
     setSaving(true);
 
     try {
-      const body: Record<string, string | number | null> = {
+      const body: Record<string, string | number | string[] | null> = {
         kindle_email: kindleEmail.trim(),
         sender_email: senderEmail.trim(),
-        auto_send_threshold: autoSendThreshold ? Number(autoSendThreshold) : null,
-        schedule_day: scheduleDay || null,
+        min_article_count: minArticleCount ? Number(minArticleCount) : null,
+        schedule_days: scheduleDays.length > 0 ? scheduleDays : null,
         schedule_time: scheduleTime || null,
+        timezone: timezone || null,
       };
 
       // Only send password if the user entered a new one
@@ -118,9 +181,10 @@ export default function SettingsPage() {
           .update({
             kindle_email: body.kindle_email,
             sender_email: body.sender_email,
-            auto_send_threshold: body.auto_send_threshold,
-            schedule_day: body.schedule_day,
+            min_article_count: body.min_article_count,
+            schedule_days: body.schedule_days,
             schedule_time: body.schedule_time,
+            timezone: body.timezone,
           })
           .eq("user_id", user.id);
 
@@ -228,7 +292,7 @@ export default function SettingsPage() {
             className="text-sm"
             style={{ fontFamily: "'DM Sans', sans-serif", color: "#888888" }}
           >
-            Configure your Kindle email and sending preferences
+            Configure your Kindle email and delivery preferences
           </p>
         </div>
         <div className="flex items-center justify-center py-20">
@@ -268,6 +332,8 @@ export default function SettingsPage() {
     );
   }
 
+  const hasSchedule = scheduleDays.length > 0;
+
   return (
     <div style={{ animation: "fadeUp 0.6s ease both" }}>
       <div className="mb-8">
@@ -285,7 +351,7 @@ export default function SettingsPage() {
           className="text-sm"
           style={{ fontFamily: "'DM Sans', sans-serif", color: "#888888" }}
         >
-          Configure your Kindle email and sending preferences
+          Configure your Kindle email and delivery preferences
         </p>
       </div>
 
@@ -550,7 +616,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Auto-Send Preferences */}
+        {/* Automatic Delivery */}
         <div
           className="rounded-xl border p-6 mb-4"
           style={{
@@ -592,7 +658,7 @@ export default function SettingsPage() {
                   color: "#ededed",
                 }}
               >
-                Auto-Send
+                Automatic Delivery
               </h2>
               <p
                 className="text-xs"
@@ -601,14 +667,131 @@ export default function SettingsPage() {
                   color: "#666666",
                 }}
               >
-                Automatically send when your queue reaches a threshold or on a
-                schedule
+                Schedule when queued articles are automatically sent to your Kindle
               </p>
             </div>
           </div>
 
           <div className="space-y-5">
-            {/* Threshold */}
+            {/* Day picker */}
+            <div>
+              <label
+                className="block text-xs mb-2.5"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "#888888",
+                }}
+              >
+                Delivery days
+              </label>
+              <div className="flex gap-2">
+                {DAY_OPTIONS.map((day) => {
+                  const isSelected = scheduleDays.includes(day.value);
+                  return (
+                    <button
+                      key={day.value}
+                      type="button"
+                      onClick={() => toggleDay(day.value)}
+                      className="flex-1 rounded-lg py-2 text-xs font-medium transition-all duration-200 cursor-pointer"
+                      style={{
+                        fontFamily: "'DM Sans', sans-serif",
+                        background: isSelected
+                          ? "rgba(34,197,94,0.15)"
+                          : "#0a0a0a",
+                        border: isSelected
+                          ? "1px solid rgba(34,197,94,0.4)"
+                          : "1px solid #262626",
+                        color: isSelected ? "#22c55e" : "#888888",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.borderColor = "#404040";
+                          e.currentTarget.style.color = "#ededed";
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSelected) {
+                          e.currentTarget.style.borderColor = "#262626";
+                          e.currentTarget.style.color = "#888888";
+                        }
+                      }}
+                    >
+                      {day.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p
+                className="text-xs mt-1.5"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "#555555",
+                }}
+              >
+                {hasSchedule
+                  ? `Delivery on ${scheduleDays.length} day${scheduleDays.length !== 1 ? "s" : ""} per week`
+                  : "Select days to enable automatic delivery"}
+              </p>
+            </div>
+
+            {/* Time + Timezone row */}
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <label
+                  className="block text-xs mb-1.5"
+                  style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: "#888888",
+                  }}
+                >
+                  Delivery time
+                </label>
+                <input
+                  type="time"
+                  value={scheduleTime}
+                  onChange={(e) => {
+                    setScheduleTime(e.target.value);
+                    setError(null);
+                  }}
+                  disabled={!hasSchedule}
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={inputStyle}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                />
+              </div>
+              <div className="flex-1">
+                <label
+                  className="block text-xs mb-1.5"
+                  style={{
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: "#888888",
+                  }}
+                >
+                  Timezone
+                </label>
+                <select
+                  value={timezone}
+                  onChange={(e) => {
+                    setTimezone(e.target.value);
+                    setError(null);
+                  }}
+                  disabled={!hasSchedule}
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 appearance-none disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={inputStyle}
+                  onFocus={handleFocus}
+                  onBlur={handleBlur}
+                >
+                  {timezones.current.map((tz) => (
+                    <option key={tz} value={tz}>
+                      {formatTimezoneLabel(tz)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Minimum articles */}
             <div>
               <label
                 className="block text-xs mb-1.5"
@@ -617,19 +800,20 @@ export default function SettingsPage() {
                   color: "#888888",
                 }}
               >
-                Auto-send after N articles
+                Minimum articles to send
               </label>
               <input
                 type="number"
-                min="2"
+                min="1"
                 max="50"
-                value={autoSendThreshold}
+                value={minArticleCount}
                 onChange={(e) => {
-                  setAutoSendThreshold(e.target.value);
+                  setMinArticleCount(e.target.value);
                   setError(null);
                 }}
-                placeholder="e.g. 5 (leave empty to disable)"
-                className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200"
+                disabled={!hasSchedule}
+                placeholder="1"
+                className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                 style={inputStyle}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
@@ -641,89 +825,9 @@ export default function SettingsPage() {
                   color: "#555555",
                 }}
               >
-                When your queue reaches this number, a 30-second countdown
-                starts before sending
-              </p>
-            </div>
-
-            {/* Divider */}
-            <div
-              className="flex items-center gap-3"
-              style={{ color: "#555555" }}
-            >
-              <div
-                className="flex-1 h-px"
-                style={{ background: "#1e1e1e" }}
-              />
-              <span
-                className="text-xs"
-                style={{ fontFamily: "'DM Sans', sans-serif" }}
-              >
-                or
-              </span>
-              <div
-                className="flex-1 h-px"
-                style={{ background: "#1e1e1e" }}
-              />
-            </div>
-
-            {/* Schedule */}
-            <div>
-              <label
-                className="block text-xs mb-1.5"
-                style={{
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: "#888888",
-                }}
-              >
-                Weekly schedule
-              </label>
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <select
-                    value={scheduleDay}
-                    onChange={(e) => {
-                      setScheduleDay(e.target.value);
-                      setError(null);
-                    }}
-                    className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 appearance-none"
-                    style={inputStyle}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
-                  >
-                    {DAYS.map((d) => (
-                      <option key={d.value} value={d.value}>
-                        {d.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex-1">
-                  <input
-                    type="time"
-                    value={scheduleTime}
-                    onChange={(e) => {
-                      setScheduleTime(e.target.value);
-                      setError(null);
-                    }}
-                    disabled={!scheduleDay}
-                    className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={inputStyle}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
-                  />
-                </div>
-              </div>
-              <p
-                className="text-xs mt-1.5"
-                style={{
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: "#555555",
-                }}
-              >
-                {scheduleDay
-                  ? "Queued articles will be sent automatically on this day and time"
-                  : "Select a day to enable weekly scheduled sending"}
+                {hasSchedule
+                  ? "Skips delivery if your queue has fewer articles than this"
+                  : "Select delivery days first to configure"}
               </p>
             </div>
           </div>

@@ -2,15 +2,15 @@ import type { Config } from "@netlify/functions";
 import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 
-// Day abbreviation to JS day number (0=Sun, 1=Mon, etc.)
-const DAY_MAP: Record<string, number> = {
-  sun: 0,
-  mon: 1,
-  tue: 2,
-  wed: 3,
-  thu: 4,
-  fri: 5,
-  sat: 6,
+// JS day number (0=Sun, 1=Mon, etc.) to 3-letter abbreviation
+const DAY_ABBREV: Record<number, string> = {
+  0: "sun",
+  1: "mon",
+  2: "tue",
+  3: "wed",
+  4: "thu",
+  5: "fri",
+  6: "sat",
 };
 
 function escapeHtml(text: string): string {
@@ -29,6 +29,40 @@ function extractDomain(url: string): string {
   }
 }
 
+/**
+ * Get the current day abbreviation and hour in a given timezone.
+ * Uses Intl.DateTimeFormat to correctly handle DST and timezone offsets.
+ */
+function getCurrentDayAndHour(timezone: string): { day: string; hour: number } {
+  try {
+    const now = new Date();
+
+    // Get the weekday in the user's timezone
+    const dayFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      weekday: "short",
+    });
+    const dayStr = dayFormatter.format(now).toLowerCase().slice(0, 3); // "mon", "tue", etc.
+
+    // Get the hour in the user's timezone
+    const hourFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hour: "numeric",
+      hour12: false,
+    });
+    const parts = hourFormatter.formatToParts(now);
+    const hourPart = parts.find((p) => p.type === "hour");
+    const hour = hourPart ? parseInt(hourPart.value, 10) : 0;
+
+    return { day: dayStr, hour };
+  } catch {
+    // Fallback to UTC if timezone is invalid
+    const now = new Date();
+    const day = DAY_ABBREV[now.getUTCDay()] || "mon";
+    return { day, hour: now.getUTCHours() };
+  }
+}
+
 export default async function handler() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -41,16 +75,11 @@ export default async function handler() {
   // Use service role key to bypass RLS
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  const now = new Date();
-  const currentDay = now.getUTCDay(); // 0-6
-  const currentHour = now.getUTCHours();
-
-  // Find users whose schedule matches the current UTC day and hour
-  // schedule_time is stored as "HH:MM" (user's local time — we match by hour)
+  // Fetch all users who have scheduled days configured and complete email settings
   const { data: allSettings, error: settingsError } = await supabase
     .from("settings")
-    .select("user_id, kindle_email, sender_email, smtp_password, schedule_day, schedule_time")
-    .not("schedule_day", "is", null)
+    .select("user_id, kindle_email, sender_email, smtp_password, schedule_days, schedule_time, timezone, min_article_count")
+    .not("schedule_days", "is", null)
     .not("schedule_time", "is", null)
     .not("kindle_email", "is", null)
     .not("sender_email", "is", null)
@@ -66,14 +95,14 @@ export default async function handler() {
     return new Response("No scheduled sends", { status: 200 });
   }
 
-  // Filter to users whose schedule matches the current UTC hour
-  // Note: schedule_time is stored as the user's intended local time.
-  // For a proper implementation, we'd need timezone per user.
-  // For now, we match on UTC — the user sets the time in their local tz
-  // and we treat it as UTC. This is documented as a known limitation.
+  // Filter to users whose schedule matches the current day/hour in their timezone
   const matchingUsers = allSettings.filter((s) => {
-    const dayNum = DAY_MAP[s.schedule_day];
-    if (dayNum === undefined || dayNum !== currentDay) return false;
+    const userTimezone = s.timezone || "UTC";
+    const { day: currentDay, hour: currentHour } = getCurrentDayAndHour(userTimezone);
+
+    // Check if current day is in their schedule_days array
+    const scheduleDays = s.schedule_days as string[];
+    if (!scheduleDays.includes(currentDay)) return false;
 
     // Parse HH:MM and match the hour
     const [hourStr] = (s.schedule_time as string).split(":");
@@ -82,7 +111,7 @@ export default async function handler() {
   });
 
   if (matchingUsers.length === 0) {
-    console.log(`No users scheduled for day=${currentDay} hour=${currentHour}`);
+    console.log("No users matched for this hour");
     return new Response("No matching schedules", { status: 200 });
   }
 
@@ -114,6 +143,13 @@ export default async function handler() {
 
       if (sendableArticles.length === 0) {
         console.log(`User ${settings.user_id}: no articles with content, skipping`);
+        continue;
+      }
+
+      // Check minimum article count
+      const minCount = settings.min_article_count || 1;
+      if (sendableArticles.length < minCount) {
+        console.log(`User ${settings.user_id}: only ${sendableArticles.length} articles, minimum is ${minCount}, skipping`);
         continue;
       }
 

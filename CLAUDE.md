@@ -201,7 +201,7 @@ send_history
 settings
 ├── user_id (pk, fk → auth.users)
 ├── kindle_email, sender_email, smtp_password (encrypted)
-├── auto_send_threshold, schedule_day, schedule_time
+├── min_article_count, schedule_days (text[]), schedule_time, timezone
 ├── created_at, updated_at (auto-updated via trigger)
 ```
 
@@ -237,6 +237,7 @@ All files live under `web/`:
 | `web/src/lib/types.ts` | Shared TypeScript types (Article, Settings, SendHistory) used across pages |
 | `web/supabase/migrations/001_create_tables.sql` | Database schema — articles, send_history, settings tables + RLS policies |
 | `web/supabase/migrations/002_add_read_time_and_description.sql` | Adds read_time_minutes and description columns to articles |
+| `web/supabase/migrations/003_rework_auto_send.sql` | Reworks delivery settings: schedule_day → schedule_days array, auto_send_threshold → min_article_count, adds timezone |
 | `web/netlify/functions/scheduled-send.mts` | Netlify Scheduled Function — runs hourly, checks user schedules, sends queued articles |
 
 ## V2 Design system
@@ -340,22 +341,20 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 
 - ✅ Send History page — queries `send_history` table, shows last 10 sends with status icon, article count, error message, smart date formatting
 - ✅ `SendHistory` type added to shared types (`web/src/lib/types.ts`)
-- ✅ Threshold auto-send — when queue reaches N articles, shows a 30-second countdown toast with cancel button
-- ✅ Countdown cancels automatically if articles are removed below threshold
-- ✅ Auto-send threshold loaded from user settings on dashboard mount
-- ✅ Weekly scheduled send — Netlify Scheduled Function (`web/netlify/functions/scheduled-send.mts`) runs hourly via cron
-- ✅ Scheduled function queries all users with matching `schedule_day` + `schedule_time`, runs full EPUB + email pipeline per user
+- ✅ Unified "Automatic Delivery" system — replaces confusing "threshold OR schedule" with day-of-week checkboxes + time + timezone
+- ✅ Day picker — 7 pill-style toggles (Mon–Sun), user picks any combination of days
+- ✅ Timezone picker — auto-detected via `Intl.DateTimeFormat`, full IANA timezone list via `Intl.supportedValuesOf('timeZone')`
+- ✅ Minimum article count — gate on scheduled sends (1–50, default 1), skips delivery if queue is below minimum
+- ✅ Dashboard simplified — removed threshold countdown toast, timer, and cancel button entirely
+- ✅ Scheduled function updated — multi-day matching (`schedule_days` array contains current day), timezone-aware via `Intl.DateTimeFormat`
 - ✅ Uses Supabase service role key to bypass RLS (runs without user session)
 - ✅ `netlify.toml` updated with `[functions]` directory config
-- ✅ Settings page — auto-send section fully enabled (was disabled "Coming soon" placeholder)
-- ✅ Threshold input (2–50), weekly schedule day dropdown, schedule time picker
-- ✅ Settings API route updated to accept and validate auto-send fields
 - ✅ Settings page visual polish — section header icons, card-like groupings, better spacing
 - ✅ Test email button — sends a mini test EPUB to verify full pipeline (SMTP config + Kindle address)
 - ✅ Test email API route (`/api/send/test`) — generates small EPUB with delivery confirmation content
 - ✅ Test button disabled until email settings are saved; shows spinner during send
-- ✅ Password-preserving save — updating auto-send settings without re-entering password uses direct Supabase update
-- ⚠️ Scheduled send uses UTC time matching — timezone-aware scheduling would require a user timezone field (not yet implemented)
+- ✅ Password-preserving save — updating delivery settings without re-entering password uses direct Supabase update
+- ✅ DB migration 003 — `schedule_day` → `schedule_days text[]`, `auto_send_threshold` → `min_article_count`, added `timezone` column
 - ⚠️ Scheduled function requires `SUPABASE_SERVICE_ROLE_KEY` env var on Netlify (must be set manually)
 
 ### Phase 6 plan (EPUB Customization)
@@ -521,8 +520,11 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
 | 2026-02-14 | Kindle-native fonts only (Bookerly, Georgia, Palatino, Helvetica) | Ensures fonts render correctly on all Kindle devices without embedding font files in EPUB. |
 | 2026-02-14 | JSONB column for EPUB preferences (considered) | Single `epub_preferences` JSONB column vs individual columns — more flexible for adding future options without migrations. Decision TBD at implementation time. |
 | 2026-02-14 | No archive/read-tracking links in EPUB | Adds complexity (server-side redirect routes, tracking state) for marginal value. Can revisit later. |
-| 2026-02-15 | 30-second countdown toast for threshold auto-send | Gives user a chance to add more articles or cancel; better UX than immediate trigger |
-| 2026-02-15 | Netlify Scheduled Function for weekly send (hourly cron) | Runs every hour, matches users whose schedule_day + schedule_time fall in current UTC hour. Requires SUPABASE_SERVICE_ROLE_KEY env var. |
-| 2026-02-15 | UTC-based schedule matching (no user timezone) | Simpler implementation; user sets schedule time in UTC context. Timezone-aware scheduling deferred to a future improvement. |
+| 2026-02-15 | Netlify Scheduled Function for send (hourly cron) | Runs every hour, matches users whose schedule_days + schedule_time fall in current hour (timezone-aware). Requires SUPABASE_SERVICE_ROLE_KEY env var. |
 | 2026-02-15 | Test email sends mini EPUB (not plain text) | Tests the full pipeline: EPUB generation + SMTP + Kindle delivery. Catches more failure modes than a plain text email. |
 | 2026-02-15 | Send history shows simple summary (no article titles) | DB only stores article_count; avoids join table complexity. Shows date, count, and status per entry. |
+| 2026-02-16 | Unified delivery system (replaced threshold + single-day schedule) | Instapaper-inspired design. Day-of-week checkboxes instead of dropdown, minimum article count as gate instead of threshold trigger, timezone picker. Simpler, clearer UX. |
+| 2026-02-16 | Day checkboxes instead of daily/weekly dropdown | User picks any combination of Mon–Sun. More flexible than "daily or pick one day". |
+| 2026-02-16 | Minimum article count as gate (not threshold trigger) | Scheduled sends skip if queue < minimum. Removed countdown toast from dashboard entirely — less intrusive. |
+| 2026-02-16 | Timezone picker with auto-detection | `Intl.supportedValuesOf('timeZone')` for full list, `Intl.DateTimeFormat().resolvedOptions().timeZone` for auto-detect. No external library needed. |
+| 2026-02-16 | `schedule_days text[]` column (replaces `schedule_day text`) | Postgres array column stores multiple days. Scheduled function checks if current day is in the array. |
