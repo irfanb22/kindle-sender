@@ -238,7 +238,7 @@ All files live under `web/`:
 | `web/supabase/migrations/001_create_tables.sql` | Database schema — articles, send_history, settings tables + RLS policies |
 | `web/supabase/migrations/002_add_read_time_and_description.sql` | Adds read_time_minutes and description columns to articles |
 | `web/supabase/migrations/003_rework_auto_send.sql` | Reworks delivery settings: schedule_day → schedule_days array, auto_send_threshold → min_article_count, adds timezone |
-| `web/netlify/functions/scheduled-send.mts` | Netlify Scheduled Function — runs hourly, checks user schedules, sends queued articles |
+| `web/src/app/api/cron/send/route.ts` | Cron API route — scheduled send logic, called hourly by Supabase pg_cron |
 
 ## V2 Design system
 
@@ -335,7 +335,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - ✅ Supabase Site URL + redirect URLs updated for production domain
 - ✅ Resend configured as custom SMTP in Supabase (replaces rate-limited built-in email provider)
 - ✅ Magic link auth verified working on production (`https://kindle-sender.netlify.app`)
-- ⚠️ Send-to-Kindle not yet tested on Netlify (works locally; serverless timeout may be an issue)
+- ✅ Send-to-Kindle verified working on Netlify (manual send + scheduled cron send)
 
 ### Phase 5 progress (Auto-Send, History & Settings Polish)
 
@@ -346,16 +346,17 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - ✅ Timezone picker — auto-detected via `Intl.DateTimeFormat`, full IANA timezone list via `Intl.supportedValuesOf('timeZone')`
 - ✅ Minimum article count — gate on scheduled sends (1–50, default 1), skips delivery if queue is below minimum
 - ✅ Dashboard simplified — removed threshold countdown toast, timer, and cancel button entirely
-- ✅ Scheduled function updated — multi-day matching (`schedule_days` array contains current day), timezone-aware via `Intl.DateTimeFormat`
+- ✅ Scheduled send via Supabase `pg_cron` + `pg_net` calling `/api/cron/send` hourly — multi-day matching (`schedule_days` array contains current day), timezone-aware via `Intl.DateTimeFormat`
 - ✅ Uses Supabase service role key to bypass RLS (runs without user session)
-- ✅ `netlify.toml` updated with `[functions]` directory config
+- ✅ `netlify.toml` cleaned up (removed `[functions]` config — Netlify standalone functions don't work with Next.js plugin)
 - ✅ Settings page visual polish — section header icons, card-like groupings, better spacing
 - ✅ Test email button — sends a mini test EPUB to verify full pipeline (SMTP config + Kindle address)
 - ✅ Test email API route (`/api/send/test`) — generates small EPUB with delivery confirmation content
 - ✅ Test button disabled until email settings are saved; shows spinner during send
 - ✅ Password-preserving save — updating delivery settings without re-entering password uses direct Supabase update
 - ✅ DB migration 003 — `schedule_day` → `schedule_days text[]`, `auto_send_threshold` → `min_article_count`, added `timezone` column
-- ⚠️ Scheduled function requires `SUPABASE_SERVICE_ROLE_KEY` env var on Netlify (must be set manually)
+- ✅ `SUPABASE_SERVICE_ROLE_KEY` env var set on Netlify
+- ⚠️ Netlify Scheduled Functions do NOT work with `@netlify/plugin-nextjs` — the plugin overrides standalone functions entirely. Cron is handled by Supabase `pg_cron` instead.
 
 ### Phase 6 plan (EPUB Customization)
 
@@ -523,7 +524,7 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
 | 2026-02-14 | Kindle-native fonts only (Bookerly, Georgia, Palatino, Helvetica) | Ensures fonts render correctly on all Kindle devices without embedding font files in EPUB. |
 | 2026-02-14 | JSONB column for EPUB preferences (considered) | Single `epub_preferences` JSONB column vs individual columns — more flexible for adding future options without migrations. Decision TBD at implementation time. |
 | 2026-02-14 | No archive/read-tracking links in EPUB | Adds complexity (server-side redirect routes, tracking state) for marginal value. Can revisit later. |
-| 2026-02-15 | Netlify Scheduled Function for send (hourly cron) | Runs every hour, matches users whose schedule_days + schedule_time fall in current hour (timezone-aware). Requires SUPABASE_SERVICE_ROLE_KEY env var. |
+| 2026-02-15 | Supabase pg_cron for scheduled send (replaces Netlify Scheduled Function) | `@netlify/plugin-nextjs` completely overrides standalone Netlify functions — the Next.js Server Handler intercepts all invocations, so standalone functions never execute (zero logs, zero metrics). Replaced with Supabase `pg_cron` + `pg_net` calling `/api/cron/send` every hour. Cron job created via SQL in Supabase dashboard. Requires SUPABASE_SERVICE_ROLE_KEY env var on Netlify. |
 | 2026-02-15 | Test email sends mini EPUB (not plain text) | Tests the full pipeline: EPUB generation + SMTP + Kindle delivery. Catches more failure modes than a plain text email. |
 | 2026-02-15 | Send history shows simple summary (no article titles) | DB only stores article_count; avoids join table complexity. Shows date, count, and status per entry. |
 | 2026-02-16 | Unified delivery system (replaced threshold + single-day schedule) | Instapaper-inspired design. Day-of-week checkboxes instead of dropdown, minimum article count as gate instead of threshold trigger, timezone picker. Simpler, clearer UX. |
