@@ -104,7 +104,14 @@ export default function SettingsPage() {
           setSenderEmail(data.settings.sender_email || "");
           setHasExistingPassword(!!data.settings.smtp_password);
           setScheduleDays(data.settings.schedule_days || []);
-          setScheduleTime(data.settings.schedule_time || "");
+          // Normalize to hour-only (e.g., "19:30" → "19:00")
+          const rawTime = data.settings.schedule_time || "";
+          if (rawTime && rawTime.includes(":")) {
+            const hour = rawTime.split(":")[0].padStart(2, "0");
+            setScheduleTime(`${hour}:00`);
+          } else {
+            setScheduleTime(rawTime);
+          }
           setTimezone(data.settings.timezone || getLocalTimezone());
           setMinArticleCount(
             data.settings.min_article_count
@@ -768,19 +775,32 @@ export default function SettingsPage() {
                 >
                   Delivery time
                 </label>
-                <input
-                  type="time"
+                <select
                   value={scheduleTime}
                   onChange={(e) => {
                     setScheduleTime(e.target.value);
                     setError(null);
                   }}
                   disabled={!hasSchedule}
-                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200 appearance-none disabled:opacity-40 disabled:cursor-not-allowed"
                   style={inputStyle}
                   onFocus={handleFocus}
                   onBlur={handleBlur}
-                />
+                >
+                  <option value="">Select time</option>
+                  {Array.from({ length: 24 }, (_, h) => {
+                    const value = `${String(h).padStart(2, "0")}:00`;
+                    const label = new Date(2000, 0, 1, h).toLocaleTimeString("en-US", {
+                      hour: "numeric",
+                      hour12: true,
+                    });
+                    return (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
               <div className="flex-1">
                 <label
