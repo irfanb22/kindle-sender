@@ -46,7 +46,7 @@ export async function POST() {
     const fontFamily = FONT_MAP[settings.epub_font || "bookerly"] || FONT_MAP.bookerly;
     const testContent = `
       <h2>Test Delivery Successful</h2>
-      <p>This is a test email from Kindle Sender. If you're reading this on your Kindle, your email configuration is working correctly.</p>
+      <p>This is a test email from q2kindle. If you're reading this on your Kindle, your email configuration is working correctly.</p>
       <p><strong>Sent:</strong> ${new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" })}</p>
       <p><strong>From:</strong> ${settings.sender_email}</p>
       <p><strong>To:</strong> ${settings.kindle_email}</p>
@@ -57,8 +57,8 @@ export async function POST() {
     try {
       const rawResult = await generateEpub(
         {
-          title: `Kindle Sender - Test (${dateStr})`,
-          author: "Kindle Sender",
+          title: `q2kindle - Test (${dateStr})`,
+          author: "q2kindle",
           css: `body { font-family: ${fontFamily}; line-height: 1.7; margin: 1em; color: #1a1a1a; }
 h2 { font-size: 1.2em; margin: 0 0 0.8em; }
 p { margin: 0 0 0.75em; text-indent: 0; }`,
@@ -102,11 +102,11 @@ p { margin: 0 0 0.75em; text-indent: 0; }`,
       await transporter.sendMail({
         from: settings.sender_email,
         to: settings.kindle_email,
-        subject: "Kindle Sender - Test",
+        subject: "q2kindle - Test",
         html: "<div></div>",
         attachments: [
           {
-            filename: `KindleSender-Test-${dateStr}.epub`,
+            filename: `q2kindle-Test-${dateStr}.epub`,
             content: epubBuffer,
             contentType: "application/epub+zip",
           },

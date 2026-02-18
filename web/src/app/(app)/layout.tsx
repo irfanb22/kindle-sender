@@ -79,7 +79,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 style={{ fontFamily: "'Instrument Serif', Georgia, serif", color: '#ededed', letterSpacing: '-0.01em' }}
                 onClick={() => router.push("/dashboard")}
               >
-                Kindle Sender
+                q2kindle
               </span>
 
               <nav className="flex items-center gap-1">

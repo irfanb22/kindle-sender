@@ -67,7 +67,7 @@ function buildCoverHtml(options: {
     : "";
 
   return `<div class="cover">
-  <p class="brand">Kindle Sender</p>
+  <p class="brand">q2kindle</p>
   ${issueLine}
   <p class="date">${escapeHtml(formattedDate)}</p>
   <div class="divider"></div>
@@ -173,12 +173,12 @@ export async function generateKindleEpub(options: {
   });
 
   const chapters = [coverChapter, ...articleChapters];
-  const title = `ReadLater - ${dateStr}`;
+  const title = `q2kindle - ${dateStr}`;
 
   const rawResult = await generateEpub(
     {
       title,
-      author: "Kindle Sender",
+      author: "q2kindle",
       css: buildCss(fontFamily),
       ignoreFailedDownloads: true,
       fetchTimeout: 10000,
@@ -201,6 +201,6 @@ export async function generateKindleEpub(options: {
   return {
     buffer,
     title,
-    filename: `ReadLater-${dateStr}.epub`,
+    filename: `q2kindle-${dateStr}.epub`,
   };
 }

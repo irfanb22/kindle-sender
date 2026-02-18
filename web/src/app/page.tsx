@@ -86,7 +86,7 @@ function LoginForm() {
                 color: '#ededed',
                 letterSpacing: '-0.02em',
               }}>
-              Kindle Sender
+              q2kindle
             </h1>
 
             <p className="text-base leading-relaxed"
