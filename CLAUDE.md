@@ -238,6 +238,8 @@ All files live under `web/`:
 | `web/supabase/migrations/001_create_tables.sql` | Database schema — articles, send_history, settings tables + RLS policies |
 | `web/supabase/migrations/002_add_read_time_and_description.sql` | Adds read_time_minutes and description columns to articles |
 | `web/supabase/migrations/003_rework_auto_send.sql` | Reworks delivery settings: schedule_day → schedule_days array, auto_send_threshold → min_article_count, adds timezone |
+| `web/supabase/migrations/004_epub_customization.sql` | Adds EPUB preference columns and issue_number to settings/send_history |
+| `web/supabase/migrations/005_add_articles_data_to_send_history.sql` | Adds `articles_data` JSONB column to send_history for per-send article snapshots |
 | `web/src/app/api/cron/send/route.ts` | Cron API route — scheduled send logic, called hourly by Supabase pg_cron |
 
 ## V2 Design system
@@ -418,17 +420,20 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
 - No article separator customization (keeping current flowing style)
 - No source URL in EPUB metadata (already removed in current implementation)
 
-### Phase 7 plan (Polish, Branding & Custom Domain)
+### Phase 7 progress (Polish, Branding & Custom Domain)
 
-- **Clickable article links** — queue cards link to original article URL, displayed as clean domain (e.g. "ofdollarsanddata.com" links to full URL, opens in new tab)
-- **Enhanced send history** — click into a send to see which articles were included. Requires storing article titles/URLs per send (JSON array on send_history or join table). Detail view shows article list with titles and sources.
-- Mobile responsive design — breakpoints for phone/tablet, responsive Kindle mockup
-- Loading states and error handling improvements across all pages
-- PWA manifest, service worker, app icons
-- **Favicon / web icon** — part of branding work, designed alongside logo and app identity
-- **Branding** — finalize app name (currently "Kindle Sender" as codename), logo, color palette, favicon, update cover page branding to match
-- **Custom domain** — purchase and configure custom domain (replace `kindle-sender.netlify.app`), update Supabase redirect URLs, Resend sender domain with DNS verification
-- Resend custom domain setup (replace `onboarding@resend.dev` with branded sender email)
+- ✅ **Clickable article links** — article titles on queue cards link to original URLs (green hover + underline, opens in new tab). Uses `extractDomain()` fallback for display text.
+- ✅ **Enhanced send history** — `articles_data` JSONB column on `send_history` stores article title/URL snapshots per send. History entries with data show chevron, expand on click to reveal numbered article list with linked titles. Migration 005. Both `/api/send` and `/api/cron/send` store article data on success.
+- ✅ **EPUB cover page ordering** — cover chapter uses `beforeToc: true` + `excludeFromToc: true` so it appears before the auto-generated TOC in reading order.
+- ✅ **Hourly delivery time picker** — replaced free-form `<input type="time">` with `<select>` of hourly slots (12 AM–11 PM), since pg_cron runs hourly. Normalizes existing minute-based values on load.
+- ⬜ **Dynamic cover image for Kindle library** — Kindle's library grid needs an actual image file (not just an HTML chapter) registered in EPUB metadata via `<meta name="cover"/>`. `epub-gen-memory` supports a `cover` option (URL or File) that handles this. Current HTML cover page renders when reading but doesn't appear in the Kindle library view. Need to dynamically generate a cover image (using @vercel/og, sharp+canvas, or SVG-to-PNG) matching the current cover design (brand, issue number, date, article count) and pass it to `generateEpub()`. Instapaper does this — their cover shows in the library.
+- ⬜ Mobile responsive design — breakpoints for phone/tablet, responsive Kindle mockup
+- ⬜ Loading states and error handling improvements across all pages
+- ⬜ PWA manifest, service worker, app icons
+- ⬜ **Favicon / web icon** — part of branding work, designed alongside logo and app identity
+- ⬜ **Branding** — finalize app name (currently "Kindle Sender" as codename), logo, color palette, favicon, update cover page branding to match
+- ⬜ **Custom domain** — purchase and configure custom domain (replace `kindle-sender.netlify.app`), update Supabase redirect URLs, Resend sender domain with DNS verification
+- ⬜ Resend custom domain setup (replace `onboarding@resend.dev` with branded sender email)
 
 ## V2 Pages (planned)
 
@@ -532,3 +537,9 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
 | 2026-02-16 | Minimum article count as gate (not threshold trigger) | Scheduled sends skip if queue < minimum. Removed countdown toast from dashboard entirely — less intrusive. |
 | 2026-02-16 | Timezone picker with auto-detection | `Intl.supportedValuesOf('timeZone')` for full list, `Intl.DateTimeFormat().resolvedOptions().timeZone` for auto-detect. No external library needed. |
 | 2026-02-16 | `schedule_days text[]` column (replaces `schedule_day text`) | Postgres array column stores multiple days. Scheduled function checks if current day is in the array. |
+| 2026-02-18 | Clickable article titles (not separate link element) | Title is the link — clicking opens original URL in new tab. Green hover matches design system. |
+| 2026-02-18 | `articles_data` JSONB on send_history (not join table) | Lightweight snapshot of `[{title, url}]` per send. No relational integrity needed — articles may be deleted later. Simpler than a join table. Older rows have `null` and gracefully show no expand chevron. |
+| 2026-02-18 | Inline expandable history (not separate detail page) | Data is lightweight (just titles and URLs). Expanding in-place is more natural UX than navigating to a separate page. |
+| 2026-02-18 | EPUB cover uses `beforeToc: true` | `epub-gen-memory` auto-generates a TOC page. Without `beforeToc`, cover was placed after TOC. Spine order: beforeToc chapters → TOC → regular chapters. |
+| 2026-02-18 | Hourly delivery time picker (not free-form) | pg_cron runs every hour (`'0 * * * *'`), cron route matches by hour only. Free-form minute input was misleading — users could set 7:30 PM but cron only fires at 7:00 PM. Replaced with `<select>` dropdown of hourly slots. |
+| 2026-02-18 | Dynamic cover image for Kindle library (TODO) | Kindle library grid shows cover image from EPUB metadata (`<meta name="cover"/>`), not from HTML chapters. `epub-gen-memory` supports `cover` option (URL or File). Need to generate image server-side matching current cover design. Deferred for later implementation. |
