@@ -1,4 +1,4 @@
-# Kindle Sender — Project Reference
+# q2kindle — Project Reference
 
 Read this file first before working on this project. It covers how the app works, how it was built, key decisions, and known issues.
 
@@ -10,7 +10,7 @@ A web app that lets you paste article URLs, queue them up, and send them to your
 
 ## Project location
 
-`~/Projects/kindle-sender` on the developer's Mac. The repo has a GitHub remote at `github.com/irfanb22/kindle-sender`.
+`~/Projects/kindle-sender` on the developer's Mac. The repo has a GitHub remote at `github.com/irfanb22/q2kindle`.
 
 ---
 
@@ -377,11 +377,11 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 ### Phase 6.5 progress (Custom Domain)
 
 - ✅ Purchased `q2kindle.com` domain via Squarespace
-- ✅ DNS configured: A record (`@` → `75.2.60.5`) + CNAME (`www` → `kindle-sender.netlify.app`)
+- ✅ DNS configured: A record (`@` → `75.2.60.5`) + CNAME (`www` → `q2kindle.netlify.app`)
 - ✅ Netlify custom domain added, `q2kindle.com` set as primary domain
 - ✅ SSL/TLS certificate provisioned via Let's Encrypt (covers `q2kindle.com` and `www.q2kindle.com`)
 - ✅ Supabase Site URL updated to `https://q2kindle.com`
-- ✅ Supabase redirect URLs: `https://q2kindle.com/auth/callback`, `https://kindle-sender.netlify.app/auth/callback`, `http://localhost:3000/auth/callback`
+- ✅ Supabase redirect URLs: `https://q2kindle.com/auth/callback`, `https://q2kindle.netlify.app/auth/callback`, `http://localhost:3000/auth/callback`
 - ✅ Magic link auth verified working end-to-end on `q2kindle.com`
 
 ### Phase 7 progress (Polish & Branding)
@@ -396,7 +396,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - ⬜ Loading states and error handling improvements across all pages
 - ⬜ PWA manifest, service worker, app icons
 - ⬜ **Favicon / web icon** — part of branding work, designed alongside logo and app identity
-- ⬜ **Branding** — finalize app name (currently "Kindle Sender" as codename), logo, color palette, favicon, update cover page branding to match
+- ⬜ **Branding** — finalize logo, color palette, favicon, update cover page branding to match
 - ✅ **Resend custom domain** — `q2kindle.com` verified in Resend with DKIM + SPF DNS records. Supabase SMTP sender updated from `onboarding@resend.dev` to `team@q2kindle.com`. Fixes new user sign-up (shared Resend domain only sends to verified emails).
 
 ## V2 Pages (planned)
@@ -419,7 +419,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - **Plugin**: `@netlify/plugin-nextjs` (required for SSR/API routes on Netlify)
 - **Env vars on Netlify**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (set via CLI)
 - **Supabase Site URL**: Must be set to `https://q2kindle.com` (in Auth > URL Configuration)
-- **Supabase Redirect URLs**: Must include `https://q2kindle.com/auth/callback`, `https://kindle-sender.netlify.app/auth/callback`, and `http://localhost:3000/auth/callback`
+- **Supabase Redirect URLs**: Must include `https://q2kindle.com/auth/callback`, `https://q2kindle.netlify.app/auth/callback`, and `http://localhost:3000/auth/callback`
 - **Supabase Custom SMTP**: Resend (configured in Supabase Dashboard > Project Settings > Auth > SMTP Settings)
   - **Host**: `smtp.resend.com`
   - **Port**: `465`
@@ -484,7 +484,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 | 2025-02-12 | Skip articles with failed extraction silently | Send only articles with content; show skipped count in success message |
 | 2025-02-12 | Password masked in GET, preserved on email-only updates | Never send actual password to client; direct Supabase update avoids re-entering password |
 | 2025-02-14 | Deploy to Netlify now (before Phase 5) | Get it live with current features; iterate and redeploy |
-| 2025-02-14 | Netlify free subdomain (not custom domain) | `kindle-sender.netlify.app` is sufficient for now |
+| 2025-02-14 | Netlify free subdomain (not custom domain) | `q2kindle.netlify.app` is sufficient for now |
 | 2025-02-14 | `@netlify/plugin-nextjs` required | Without it, Netlify serves 404 for all routes — SSR/API routes need the plugin |
 | 2025-02-14 | Node 22 LTS for Netlify builds | v24 may not be supported on Netlify yet |
 | 2025-02-14 | `require()` for epub-gen-memory in send route | ESM `import` caused TS strict mode error on `.default` access during Netlify build |
