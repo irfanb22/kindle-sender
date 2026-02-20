@@ -234,7 +234,8 @@ All files live under `web/`:
 | `web/src/app/api/send/route.ts` | Send-to-Kindle API — generates EPUB with epub-gen-memory, emails via Nodemailer/Gmail SMTP |
 | `web/src/app/api/send/test/route.ts` | Test email API — sends a mini test EPUB to verify SMTP config and Kindle address |
 | `web/src/app/api/settings/route.ts` | Settings API — GET (load, masked password) / POST (upsert email config + auto-send prefs) |
-| `web/src/lib/types.ts` | Shared TypeScript types (Article, Settings, SendHistory) used across pages |
+| `web/src/lib/epub.ts` | Shared EPUB generation — `generateKindleEpub()`, cover page, font mapping, image stripping, CSS builder |
+| `web/src/lib/types.ts` | Shared TypeScript types (Article, Settings, SendHistory, EpubPreferences) used across pages |
 | `web/supabase/migrations/001_create_tables.sql` | Database schema — articles, send_history, settings tables + RLS policies |
 | `web/supabase/migrations/002_add_read_time_and_description.sql` | Adds read_time_minutes and description columns to articles |
 | `web/supabase/migrations/003_rework_auto_send.sql` | Reworks delivery settings: schedule_day → schedule_days array, auto_send_threshold → min_article_count, adds timezone |
@@ -268,7 +269,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 | **Phase 4** | EPUB generation + email sending + settings page | ✅ Complete |
 | **Phase 4.5** | Deployment — Netlify hosting, Resend auth emails, production login verified | ✅ Complete |
 | **Phase 5** | Auto-send, send history, settings polish, test email | ✅ Complete |
-| **Phase 6** | EPUB customization — cover page, fonts, image toggle, metadata controls | ⬜ Not started |
+| **Phase 6** | EPUB customization — cover page, fonts, image toggle, metadata controls | ✅ Complete |
 | **Phase 6.5** | Custom domain — q2kindle.com via Squarespace DNS + Netlify + Supabase | ✅ Complete |
 | **Phase 7** | Polish — mobile responsive, loading states, error handling, PWA, branding | ⬜ Not started |
 
@@ -361,65 +362,17 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - ✅ `SUPABASE_SERVICE_ROLE_KEY` env var set on Netlify
 - ⚠️ Netlify Scheduled Functions do NOT work with `@netlify/plugin-nextjs` — the plugin overrides standalone functions entirely. Cron is handled by Supabase `pg_cron` instead.
 
-### Phase 6 plan (EPUB Customization)
+### Phase 6 progress (EPUB Customization)
 
-Goal: Make the EPUB output polished and customizable — branded cover page, font options, image control, and per-field metadata toggles.
-
-#### Cover page
-
-- Minimal editorial style — clean branded cover on every digest
-- Shows: app name ("Kindle Sender" — branding TBA), digest/issue number (auto-incrementing per user, tracked in DB), date, total estimated read time, article count
-- Issue numbering uses both formats: "Issue #12 — Feb 14, 2026"
-- Read time is estimated across all articles (extracted where available, estimated where not)
-- Cover is always included (no toggle) — it's part of the product identity
-
-#### Table of contents
-
-- Kindle native TOC only (chapter-level navigation via Kindle's built-in TOC)
-- No custom styled TOC page inside the EPUB
-
-#### Article formatting
-
-- Keep current article style: title, metadata line, then content flows directly (no chapter title pages)
-- Article metadata fields are independently toggle-able per user:
-  - Author/name (on/off)
-  - Read time (on/off)
-  - Published date (on/off, shown if available from extraction)
-  - Source URL is not included in the EPUB (already removed in current implementation)
-
-#### Font options
-
-- User-selectable font for article body text
-- Options: Bookerly (Kindle default), Georgia, Palatino, Helvetica
-- Font choice stored in settings, applied as CSS in EPUB chapters
-- Default: Bookerly (matches native Kindle reading experience)
-
-#### Image handling
-
-- Simple toggle: include images (on/off)
-- Default: on (images included)
-- When off, all `<img>` tags stripped from article content before EPUB generation
-- When on, images optimized for Kindle: grayscale not forced in EPUB (Kindle handles display), `ignoreFailedDownloads: true` kept as safety net
-
-#### Settings UI
-
-- New "EPUB Formatting" section on the existing Settings page (below email config)
-- Fields: font choice (dropdown), include images (toggle), metadata toggles (author, read time, published date)
-- Stored in `settings` table (new columns or JSON field)
-
-#### Database changes
-
-- Add `issue_number` column to `send_history` (integer, auto-incremented per user on each successful send)
-- Add EPUB preference columns to `settings` table: `epub_font`, `epub_include_images`, `epub_show_author`, `epub_show_read_time`, `epub_show_published_date`
-- Alternative: single `epub_preferences` JSONB column on `settings` (more flexible, fewer migrations)
-
-#### Not included in Phase 6
-
-- No archive/read-tracking links in EPUB (decided against for now)
-- No custom TOC page styling (using Kindle native TOC)
-- No cover page toggle (always on)
-- No article separator customization (keeping current flowing style)
-- No source URL in EPUB metadata (already removed in current implementation)
+- ✅ **Cover page** — branded cover on every digest with "q2kindle" branding, issue number, date, article count, total read time. Uses `beforeToc: true` + `excludeFromToc: true` for proper spine ordering.
+- ✅ **Issue number tracking** — auto-incremented per user on each successful send. Stored in `send_history.issue_number`. Both manual and cron send routes query previous sends for next sequential number.
+- ✅ **Font options** — user-selectable body font (Bookerly default, Georgia, Palatino, Helvetica). Stored in `settings.epub_font`, applied via CSS in EPUB chapters. Font mapping in `epub.ts`.
+- ✅ **Image toggle** — include images on/off (default: on). When off, `<img>`, `<picture>`, and `<figure>` tags stripped via `stripImages()`. Stored in `settings.epub_include_images`.
+- ✅ **Metadata toggles** — three independent toggles for article headers: author (on/off), read time (on/off), published date (on/off). All default to on. Stored as individual boolean columns on `settings`.
+- ✅ **EPUB Formatting section on Settings page** — font dropdown, image toggle, metadata toggles. Saved alongside email settings.
+- ✅ **Shared EPUB generation module** — `web/src/lib/epub.ts` with `generateKindleEpub()`, `buildCss()`, `stripImages()`, font mapping. Used by both `/api/send` and `/api/cron/send`.
+- ✅ **DB migration 004** — `epub_font`, `epub_include_images`, `epub_show_author`, `epub_show_read_time`, `epub_show_published_date` columns on `settings`; `issue_number` on `send_history`; `published_at` on `articles`; CHECK constraint on font values.
+- ✅ **Full pipeline integration** — both manual send and cron send routes load EPUB preferences and pass to `generateKindleEpub()`.
 
 ### Phase 6.5 progress (Custom Domain)
 
@@ -444,7 +397,7 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
 - ⬜ PWA manifest, service worker, app icons
 - ⬜ **Favicon / web icon** — part of branding work, designed alongside logo and app identity
 - ⬜ **Branding** — finalize app name (currently "Kindle Sender" as codename), logo, color palette, favicon, update cover page branding to match
-- ⬜ Resend custom domain setup (replace `onboarding@resend.dev` with branded sender email)
+- ✅ **Resend custom domain** — `q2kindle.com` verified in Resend with DKIM + SPF DNS records. Supabase SMTP sender updated from `onboarding@resend.dev` to `team@q2kindle.com`. Fixes new user sign-up (shared Resend domain only sends to verified emails).
 
 ## V2 Pages (planned)
 
@@ -472,7 +425,7 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
   - **Port**: `465`
   - **Username**: `resend`
   - **Password**: Resend API key (set in Supabase dashboard, not in codebase)
-  - **Sender email**: `onboarding@resend.dev` (Resend shared domain)
+  - **Sender email**: `team@q2kindle.com` (custom domain, verified in Resend)
 
 ### Deployment status
 
@@ -557,3 +510,4 @@ Goal: Make the EPUB output polished and customizable — branded cover page, fon
 | 2026-02-18 | Hourly delivery time picker (not free-form) | pg_cron runs every hour (`'0 * * * *'`), cron route matches by hour only. Free-form minute input was misleading — users could set 7:30 PM but cron only fires at 7:00 PM. Replaced with `<select>` dropdown of hourly slots. |
 | 2026-02-18 | Dynamic cover image for Kindle library (TODO) | Kindle library grid shows cover image from EPUB metadata (`<meta name="cover"/>`), not from HTML chapters. `epub-gen-memory` supports `cover` option (URL or File). Need to generate image server-side matching current cover design. Deferred for later implementation. |
 | 2026-02-18 | Custom domain `q2kindle.com` (Squarespace) | Bought `.com` over `.app` — cheaper ($14 vs $20), more universally recognized, HTTPS-only benefit of `.app` is moot with Netlify auto-SSL. DNS: A record + www CNAME → Netlify. Supabase auth URLs updated. |
+| 2026-02-19 | Resend custom domain `q2kindle.com` (replaces shared `onboarding@resend.dev`) | Shared Resend domain only delivers to verified email addresses — blocked new user sign-ups. Custom domain with DKIM + SPF DNS records allows sending to any recipient. Sender updated to `team@q2kindle.com`. |
