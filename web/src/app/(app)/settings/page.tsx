@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 const DAY_OPTIONS = [
   { value: "mon", label: "Mon" },
@@ -66,9 +65,7 @@ function formatTimezoneLabel(tz: string): string {
 export default function SettingsPage() {
   // Email config
   const [kindleEmail, setKindleEmail] = useState("");
-  const [senderEmail, setSenderEmail] = useState("");
-  const [smtpPassword, setSmtpPassword] = useState("");
-  const [hasExistingPassword, setHasExistingPassword] = useState(false);
+  const [settingsSaved, setSettingsSaved] = useState(false);
 
   // Delivery schedule
   const [scheduleDays, setScheduleDays] = useState<string[]>([]);
@@ -90,7 +87,6 @@ export default function SettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const supabaseRef = useRef(createClient());
   const timezones = useRef(getTimezoneList());
 
   useEffect(() => {
@@ -101,8 +97,7 @@ export default function SettingsPage() {
 
         if (data.settings) {
           setKindleEmail(data.settings.kindle_email || "");
-          setSenderEmail(data.settings.sender_email || "");
-          setHasExistingPassword(!!data.settings.smtp_password);
+          setSettingsSaved(!!data.settings.kindle_email);
           setScheduleDays(data.settings.schedule_days || []);
           // Normalize to hour-only (e.g., "19:30" → "19:00")
           const rawTime = data.settings.schedule_time || "";
@@ -149,13 +144,8 @@ export default function SettingsPage() {
     setError(null);
     setSuccess(null);
 
-    if (!kindleEmail.trim() || !senderEmail.trim()) {
-      setError("Kindle email and Gmail address are required");
-      return;
-    }
-
-    if (!smtpPassword && !hasExistingPassword) {
-      setError("Gmail app password is required");
+    if (!kindleEmail.trim()) {
+      setError("Kindle email is required");
       return;
     }
 
@@ -171,68 +161,21 @@ export default function SettingsPage() {
     setSaving(true);
 
     try {
-      const body: Record<string, string | number | boolean | string[] | null> = {
-        kindle_email: kindleEmail.trim(),
-        sender_email: senderEmail.trim(),
-        min_article_count: minArticleCount ? Number(minArticleCount) : null,
-        schedule_days: scheduleDays.length > 0 ? scheduleDays : null,
-        schedule_time: scheduleTime || null,
-        timezone: timezone || null,
-        epub_font: epubFont,
-        epub_include_images: epubIncludeImages,
-        epub_show_author: epubShowAuthor,
-        epub_show_read_time: epubShowReadTime,
-        epub_show_published_date: epubShowPublishedDate,
-      };
-
-      // Only send password if the user entered a new one
-      if (smtpPassword) {
-        body.smtp_password = smtpPassword;
-      } else if (hasExistingPassword) {
-        // No new password — update everything except smtp_password via Supabase directly
-        const supabase = supabaseRef.current;
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) {
-          setError("Not authenticated");
-          setSaving(false);
-          return;
-        }
-
-        const { error: updateError } = await supabase
-          .from("settings")
-          .update({
-            kindle_email: body.kindle_email,
-            sender_email: body.sender_email,
-            min_article_count: body.min_article_count,
-            schedule_days: body.schedule_days,
-            schedule_time: body.schedule_time,
-            timezone: body.timezone,
-            epub_font: body.epub_font,
-            epub_include_images: body.epub_include_images,
-            epub_show_author: body.epub_show_author,
-            epub_show_read_time: body.epub_show_read_time,
-            epub_show_published_date: body.epub_show_published_date,
-          })
-          .eq("user_id", user.id);
-
-        if (updateError) {
-          setError(updateError.message);
-          setSaving(false);
-          return;
-        }
-
-        setSuccess("Settings saved");
-        setSaving(false);
-        setTimeout(() => setSuccess(null), 5000);
-        return;
-      }
-
       const res = await fetch("/api/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          kindle_email: kindleEmail.trim(),
+          min_article_count: minArticleCount ? Number(minArticleCount) : null,
+          schedule_days: scheduleDays.length > 0 ? scheduleDays : null,
+          schedule_time: scheduleTime || null,
+          timezone: timezone || null,
+          epub_font: epubFont,
+          epub_include_images: epubIncludeImages,
+          epub_show_author: epubShowAuthor,
+          epub_show_read_time: epubShowReadTime,
+          epub_show_published_date: epubShowPublishedDate,
+        }),
       });
 
       const data = await res.json();
@@ -244,8 +187,7 @@ export default function SettingsPage() {
       }
 
       setSuccess("Settings saved");
-      setHasExistingPassword(true);
-      setSmtpPassword("");
+      setSettingsSaved(true);
       setSaving(false);
       setTimeout(() => setSuccess(null), 5000);
     } catch {
@@ -474,82 +416,9 @@ export default function SettingsPage() {
                   color: "#555555",
                 }}
               >
-                Found in Amazon → Manage Content &amp; Devices → Preferences →
-                Personal Document Settings
-              </p>
-            </div>
-
-            <div>
-              <label
-                className="block text-xs mb-1.5"
-                style={{
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: "#888888",
-                }}
-              >
-                Gmail Address
-              </label>
-              <input
-                type="email"
-                value={senderEmail}
-                onChange={(e) => {
-                  setSenderEmail(e.target.value);
-                  setError(null);
-                }}
-                placeholder="you@gmail.com"
-                className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200"
-                style={inputStyle}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-              />
-              <p
-                className="text-xs mt-1.5"
-                style={{
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: "#555555",
-                }}
-              >
-                Must be added to your Amazon approved sender list
-              </p>
-            </div>
-
-            <div>
-              <label
-                className="block text-xs mb-1.5"
-                style={{
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: "#888888",
-                }}
-              >
-                Gmail App Password
-              </label>
-              <input
-                type="password"
-                value={smtpPassword}
-                onChange={(e) => {
-                  setSmtpPassword(e.target.value);
-                  setError(null);
-                }}
-                placeholder={
-                  hasExistingPassword
-                    ? "••••••••••••••••"
-                    : "16-character app password"
-                }
-                className="w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all duration-200"
-                style={inputStyle}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-              />
-              <p
-                className="text-xs mt-1.5"
-                style={{
-                  fontFamily: "'DM Sans', sans-serif",
-                  color: "#555555",
-                }}
-              >
-                Not your Gmail password.{" "}
+                Found in{" "}
                 <a
-                  href="https://support.google.com/accounts/answer/185833"
+                  href="https://www.amazon.com/hz/mycd/myx#/home/settings/pdoc"
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: "#22c55e" }}
@@ -560,8 +429,50 @@ export default function SettingsPage() {
                     (e.currentTarget.style.color = "#22c55e")
                   }
                 >
-                  How to create an app password →
+                  Amazon → Manage Content &amp; Devices → Preferences →
+                  Personal Document Settings
                 </a>
+              </p>
+            </div>
+
+            <div
+              className="rounded-lg px-4 py-3"
+              style={{
+                background: "rgba(34,197,94,0.05)",
+                border: "1px solid rgba(34,197,94,0.12)",
+              }}
+            >
+              <p
+                className="text-xs"
+                style={{
+                  fontFamily: "'DM Sans', sans-serif",
+                  color: "#888888",
+                  lineHeight: "1.5",
+                }}
+              >
+                Add{" "}
+                <span
+                  className="font-medium"
+                  style={{ color: "#22c55e" }}
+                >
+                  kindle@q2kindle.com
+                </span>{" "}
+                to your{" "}
+                <a
+                  href="https://www.amazon.com/hz/mycd/myx#/home/settings/pdoc"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: "#22c55e" }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.color = "#16a34a")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.color = "#22c55e")
+                  }
+                >
+                  Amazon Approved Senders list
+                </a>{" "}
+                so your Kindle accepts articles from q2kindle.
               </p>
             </div>
           </div>
@@ -573,7 +484,7 @@ export default function SettingsPage() {
           >
             <button
               type="button"
-              disabled={testing || !hasExistingPassword}
+              disabled={testing || !settingsSaved}
               onClick={handleTestEmail}
               className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium transition-all duration-200 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               style={{
@@ -583,7 +494,7 @@ export default function SettingsPage() {
                 border: "1px solid #262626",
               }}
               onMouseEnter={(e) => {
-                if (!testing && hasExistingPassword) {
+                if (!testing && settingsSaved) {
                   e.currentTarget.style.borderColor = "#404040";
                   e.currentTarget.style.color = "#ededed";
                 }
@@ -631,7 +542,7 @@ export default function SettingsPage() {
                 </>
               )}
             </button>
-            {!hasExistingPassword && (
+            {!settingsSaved && (
               <p
                 className="text-xs mt-2"
                 style={{
@@ -639,7 +550,7 @@ export default function SettingsPage() {
                   color: "#555555",
                 }}
               >
-                Save your email settings first to enable testing
+                Save your Kindle email first to enable testing
               </p>
             )}
           </div>

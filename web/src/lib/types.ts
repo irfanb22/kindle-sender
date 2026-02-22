@@ -14,8 +14,6 @@ export type Article = {
 
 export type Settings = {
   kindle_email: string | null;
-  sender_email: string | null;
-  smtp_password: string | null;
   min_article_count: number | null;
   schedule_days: string[] | null;
   schedule_time: string | null;

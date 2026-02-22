@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.995.0",
     "@extractus/article-extractor": "^8.0.20",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",

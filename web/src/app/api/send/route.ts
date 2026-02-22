@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { generateKindleEpub } from "@/lib/epub";
-import nodemailer from "nodemailer";
+import { sendToKindle } from "@/lib/email";
 
 export async function POST() {
   let supabase;
@@ -25,7 +25,7 @@ export async function POST() {
     // Load user's email settings and EPUB preferences
     const { data: settings, error: settingsError } = await supabase
       .from("settings")
-      .select("kindle_email, sender_email, smtp_password, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date")
+      .select("kindle_email, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date")
       .eq("user_id", user.id)
       .single();
 
@@ -39,7 +39,7 @@ export async function POST() {
       );
     }
 
-    if (!settings.kindle_email || !settings.sender_email || !settings.smtp_password) {
+    if (!settings.kindle_email) {
       return NextResponse.json(
         {
           error: "settings_not_configured",
@@ -138,28 +138,13 @@ export async function POST() {
       );
     }
 
-    // Send email via Gmail SMTP
+    // Send email via Amazon SES
     try {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: settings.sender_email,
-          pass: settings.smtp_password,
-        },
-      });
-
-      await transporter.sendMail({
-        from: settings.sender_email,
+      await sendToKindle({
         to: settings.kindle_email,
         subject: "Articles",
-        html: "<div></div>",
-        attachments: [
-          {
-            filename: epubFilename,
-            content: epubBuffer,
-            contentType: "application/epub+zip",
-          },
-        ],
+        epubBuffer,
+        epubFilename,
       });
     } catch (emailError) {
       const message =

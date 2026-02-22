@@ -18,7 +18,7 @@ export async function GET() {
     const { data, error } = await supabase
       .from("settings")
       .select(
-        "kindle_email, sender_email, smtp_password, min_article_count, schedule_days, schedule_time, timezone, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date"
+        "kindle_email, min_article_count, schedule_days, schedule_time, timezone, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date"
       )
       .eq("user_id", user.id)
       .single();
@@ -35,13 +35,7 @@ export async function GET() {
       return NextResponse.json({ settings: null });
     }
 
-    // Mask the SMTP password — never send the actual value to the client
-    return NextResponse.json({
-      settings: {
-        ...data,
-        smtp_password: data.smtp_password ? "••••••••" : null,
-      },
-    });
+    return NextResponse.json({ settings: data });
   } catch {
     return NextResponse.json(
       { error: "Failed to load settings" },
@@ -53,23 +47,16 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { kindle_email, sender_email, smtp_password, min_article_count, schedule_days, schedule_time, timezone, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date } = body;
+    const { kindle_email, min_article_count, schedule_days, schedule_time, timezone, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date } = body;
 
-    if (!kindle_email || !sender_email || !smtp_password) {
+    if (!kindle_email) {
       return NextResponse.json(
-        { error: "All three fields are required: Kindle email, Gmail address, and app password" },
+        { error: "Kindle email is required" },
         { status: 400 }
       );
     }
 
     // Basic email validation
-    if (!sender_email.includes("@")) {
-      return NextResponse.json(
-        { error: "Please enter a valid Gmail address" },
-        { status: 400 }
-      );
-    }
-
     if (!kindle_email.includes("@")) {
       return NextResponse.json(
         { error: "Please enter a valid Kindle email address" },
@@ -125,8 +112,6 @@ export async function POST(request: Request) {
     const upsertData: Record<string, unknown> = {
       user_id: user.id,
       kindle_email,
-      sender_email,
-      smtp_password,
       min_article_count: min_article_count || null,
       schedule_days: schedule_days && schedule_days.length > 0 ? schedule_days : null,
       schedule_time: schedule_time || null,

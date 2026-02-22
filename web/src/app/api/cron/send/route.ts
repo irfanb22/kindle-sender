@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { generateKindleEpub } from "@/lib/epub";
-import nodemailer from "nodemailer";
+import { sendToKindle } from "@/lib/email";
 
 // ── Timezone helpers ────────────────────────────────────────────────────────
 
@@ -71,12 +71,10 @@ export async function GET(request: Request) {
   // Fetch all users who have scheduled days configured and complete email settings
   const { data: allSettings, error: settingsError } = await supabase
     .from("settings")
-    .select("user_id, kindle_email, sender_email, smtp_password, schedule_days, schedule_time, timezone, min_article_count, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date")
+    .select("user_id, kindle_email, schedule_days, schedule_time, timezone, min_article_count, epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date")
     .not("schedule_days", "is", null)
     .not("schedule_time", "is", null)
-    .not("kindle_email", "is", null)
-    .not("sender_email", "is", null)
-    .not("smtp_password", "is", null);
+    .not("kindle_email", "is", null);
 
   if (settingsError) {
     console.error("Failed to query settings:", settingsError.message);
@@ -201,28 +199,13 @@ export async function GET(request: Request) {
         continue;
       }
 
-      // Send email
+      // Send email via Amazon SES
       try {
-        const transporter = nodemailer.createTransport({
-          service: "gmail",
-          auth: {
-            user: settings.sender_email,
-            pass: settings.smtp_password,
-          },
-        });
-
-        await transporter.sendMail({
-          from: settings.sender_email,
+        await sendToKindle({
           to: settings.kindle_email,
           subject: "Articles",
-          html: "<div></div>",
-          attachments: [
-            {
-              filename: epubFilename,
-              content: epubBuffer,
-              contentType: "application/epub+zip",
-            },
-          ],
+          epubBuffer,
+          epubFilename,
         });
         console.log(`User ${settings.user_id}: Email sent to ${settings.kindle_email}`);
       } catch (emailError) {

@@ -169,7 +169,7 @@ Full rewrite from Python desktop app to a hosted TypeScript web app. All v2 code
 | **Local cache** | React Query or SWR (planned) |
 | **Article extraction** | `@extractus/article-extractor` (replaces trafilatura) |
 | **EPUB creation** | `epub-gen-memory` (replaces ebooklib) |
-| **Email (Kindle delivery)** | Nodemailer via Netlify Function (Gmail SMTP with app password) |
+| **Email (Kindle delivery)** | Amazon SES via Nodemailer SES transport (`kindle@q2kindle.com`) |
 | **Hosting** | Netlify |
 
 ## V2 Supabase details
@@ -200,8 +200,9 @@ send_history
 
 settings
 ├── user_id (pk, fk → auth.users)
-├── kindle_email, sender_email, smtp_password (encrypted)
+├── kindle_email
 ├── min_article_count, schedule_days (text[]), schedule_time, timezone
+├── epub_font, epub_include_images, epub_show_author, epub_show_read_time, epub_show_published_date
 ├── created_at, updated_at (auto-updated via trigger)
 ```
 
@@ -227,13 +228,14 @@ All files live under `web/`:
 | `web/src/app/(app)/layout.tsx` | Authenticated layout — top nav bar (Queue/History/Settings), sign out, user email |
 | `web/src/app/(app)/dashboard/page.tsx` | Dashboard — URL input, article queue list, send-to-Kindle with loading/success states |
 | `web/src/app/(app)/history/page.tsx` | Send history — last 10 sends with status, article count, timestamps |
-| `web/src/app/(app)/settings/page.tsx` | Settings page — email config, auto-send threshold/schedule, test email button |
+| `web/src/app/(app)/settings/page.tsx` | Settings page — Kindle email, approved sender instructions, auto-send schedule, EPUB prefs, test email button |
 | `web/src/app/(app)/article/[id]/page.tsx` | Article preview page — fetches article, sanitizes HTML with DOMPurify, renders Kindle mockup |
 | `web/src/app/(app)/article/[id]/kindle-mockup.tsx` | Kindle device mockup — CSS bezel frame, e-ink screen, grayscale content rendering |
 | `web/src/app/api/articles/extract/route.ts` | Article extraction API — fetches URL, extracts content, calculates read time |
-| `web/src/app/api/send/route.ts` | Send-to-Kindle API — generates EPUB with epub-gen-memory, emails via Nodemailer/Gmail SMTP |
-| `web/src/app/api/send/test/route.ts` | Test email API — sends a mini test EPUB to verify SMTP config and Kindle address |
-| `web/src/app/api/settings/route.ts` | Settings API — GET (load, masked password) / POST (upsert email config + auto-send prefs) |
+| `web/src/app/api/send/route.ts` | Send-to-Kindle API — generates EPUB with epub-gen-memory, emails via Amazon SES |
+| `web/src/app/api/send/test/route.ts` | Test email API — sends a mini test EPUB to verify Kindle address and SES delivery |
+| `web/src/app/api/settings/route.ts` | Settings API — GET (load settings) / POST (upsert Kindle email + delivery + EPUB prefs) |
+| `web/src/lib/email.ts` | Shared email sending — `sendToKindle()` via Amazon SES + Nodemailer, `KINDLE_SENDER` constant |
 | `web/src/lib/epub.ts` | Shared EPUB generation — `generateKindleEpub()`, cover page, font mapping, image stripping, CSS builder |
 | `web/src/lib/types.ts` | Shared TypeScript types (Article, Settings, SendHistory, EpubPreferences) used across pages |
 | `web/supabase/migrations/001_create_tables.sql` | Database schema — articles, send_history, settings tables + RLS policies |
@@ -241,6 +243,7 @@ All files live under `web/`:
 | `web/supabase/migrations/003_rework_auto_send.sql` | Reworks delivery settings: schedule_day → schedule_days array, auto_send_threshold → min_article_count, adds timezone |
 | `web/supabase/migrations/004_epub_customization.sql` | Adds EPUB preference columns and issue_number to settings/send_history |
 | `web/supabase/migrations/005_add_articles_data_to_send_history.sql` | Adds `articles_data` JSONB column to send_history for per-send article snapshots |
+| `web/supabase/migrations/006_remove_smtp_credentials.sql` | Drops `sender_email` and `smtp_password` columns from settings (moved to app-owned SES) |
 | `web/src/app/api/cron/send/route.ts` | Cron API route — scheduled send logic, called hourly by Supabase pg_cron |
 
 ## V2 Design system
@@ -398,6 +401,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - ⬜ **Favicon / web icon** — part of branding work, designed alongside logo and app identity
 - ⬜ **Branding** — finalize logo, color palette, favicon, update cover page branding to match
 - ✅ **Resend custom domain** — `q2kindle.com` verified in Resend with DKIM + SPF DNS records. Supabase SMTP sender updated from `onboarding@resend.dev` to `team@q2kindle.com`. Fixes new user sign-up (shared Resend domain only sends to verified emails).
+- ✅ **Amazon SES for Kindle delivery** — Replaced user-provided Gmail SMTP credentials with app-owned Amazon SES. Users only provide Kindle email and add `kindle@q2kindle.com` to Amazon approved senders. Removes security risk of storing user email passwords. Shared `email.ts` module centralizes sending logic. Resend stays for auth emails via Supabase SMTP.
 
 ## V2 Pages (planned)
 
@@ -417,7 +421,7 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 - **Build**: Netlify builds from GitHub repo, `base = "web"`, `npm run build`, Node 22 LTS
 - **Config file**: `netlify.toml` at repo root (not inside `web/`)
 - **Plugin**: `@netlify/plugin-nextjs` (required for SSR/API routes on Netlify)
-- **Env vars on Netlify**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (set via CLI)
+- **Env vars on Netlify**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `AWS_SES_ACCESS_KEY_ID`, `AWS_SES_SECRET_ACCESS_KEY`, `AWS_SES_REGION`
 - **Supabase Site URL**: Must be set to `https://q2kindle.com` (in Auth > URL Configuration)
 - **Supabase Redirect URLs**: Must include `https://q2kindle.com/auth/callback`, `https://q2kindle.netlify.app/auth/callback`, and `http://localhost:3000/auth/callback`
 - **Supabase Custom SMTP**: Resend (configured in Supabase Dashboard > Project Settings > Auth > SMTP Settings)
@@ -511,3 +515,4 @@ Opens at `http://localhost:3000`. Requires Node.js (installed via nvm, v24 LTS).
 | 2026-02-18 | Dynamic cover image for Kindle library (TODO) | Kindle library grid shows cover image from EPUB metadata (`<meta name="cover"/>`), not from HTML chapters. `epub-gen-memory` supports `cover` option (URL or File). Need to generate image server-side matching current cover design. Deferred for later implementation. |
 | 2026-02-18 | Custom domain `q2kindle.com` (Squarespace) | Bought `.com` over `.app` — cheaper ($14 vs $20), more universally recognized, HTTPS-only benefit of `.app` is moot with Netlify auto-SSL. DNS: A record + www CNAME → Netlify. Supabase auth URLs updated. |
 | 2026-02-19 | Resend custom domain `q2kindle.com` (replaces shared `onboarding@resend.dev`) | Shared Resend domain only delivers to verified email addresses — blocked new user sign-ups. Custom domain with DKIM + SPF DNS records allows sending to any recipient. Sender updated to `team@q2kindle.com`. |
+| 2026-02-21 | Amazon SES for Kindle delivery (replaces user-provided Gmail SMTP) | Storing user Gmail app passwords was a security risk and trust barrier. SES sends from `kindle@q2kindle.com` — users only provide Kindle email. SES scales to thousands/day at $0.10/1000 vs Resend's 100/day free cap. Nodemailer kept with SES transport for minimal code change. Resend stays for Supabase auth emails. |

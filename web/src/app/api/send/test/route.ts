@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { FONT_MAP } from "@/lib/epub";
+import { sendToKindle } from "@/lib/email";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const epubModule = require("epub-gen-memory");
 const generateEpub = epubModule.default ?? epubModule;
-import nodemailer from "nodemailer";
 
 export async function POST() {
   try {
@@ -23,7 +23,7 @@ export async function POST() {
     // Load user's email settings
     const { data: settings, error: settingsError } = await supabase
       .from("settings")
-      .select("kindle_email, sender_email, smtp_password, epub_font")
+      .select("kindle_email, epub_font")
       .eq("user_id", user.id)
       .single();
 
@@ -34,7 +34,7 @@ export async function POST() {
       );
     }
 
-    if (!settings.kindle_email || !settings.sender_email || !settings.smtp_password) {
+    if (!settings.kindle_email) {
       return NextResponse.json(
         { error: "settings_not_configured", message: "Please complete your email settings first." },
         { status: 400 }
@@ -48,7 +48,7 @@ export async function POST() {
       <h2>Test Delivery Successful</h2>
       <p>This is a test email from q2kindle. If you're reading this on your Kindle, your email configuration is working correctly.</p>
       <p><strong>Sent:</strong> ${new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" })}</p>
-      <p><strong>From:</strong> ${settings.sender_email}</p>
+      <p><strong>From:</strong> kindle@q2kindle.com</p>
       <p><strong>To:</strong> ${settings.kindle_email}</p>
       <p style="color: #666; margin-top: 2em; font-size: 0.9em;">You can delete this document from your Kindle library.</p>
     `;
@@ -89,28 +89,13 @@ p { margin: 0 0 0.75em; text-indent: 0; }`,
       );
     }
 
-    // Send the test email
+    // Send the test email via Amazon SES
     try {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user: settings.sender_email,
-          pass: settings.smtp_password,
-        },
-      });
-
-      await transporter.sendMail({
-        from: settings.sender_email,
+      await sendToKindle({
         to: settings.kindle_email,
         subject: "q2kindle - Test",
-        html: "<div></div>",
-        attachments: [
-          {
-            filename: `q2kindle-Test-${dateStr}.epub`,
-            content: epubBuffer,
-            contentType: "application/epub+zip",
-          },
-        ],
+        epubBuffer,
+        epubFilename: `q2kindle-Test-${dateStr}.epub`,
       });
     } catch (emailError) {
       const message = emailError instanceof Error ? emailError.message : "Unknown error";
